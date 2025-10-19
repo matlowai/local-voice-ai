@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
-ARG PYTHON_VERSION=3.11.6
-FROM python:${PYTHON_VERSION}-slim
+ARG PYTHON_VERSION=3.12-slim-bookworm
+FROM python:${PYTHON_VERSION}
 
 # Prevents Python from writing pyc files.
 ENV PYTHONDONTWRITEBYTECODE=1
