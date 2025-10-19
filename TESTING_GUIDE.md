@@ -1,597 +1,598 @@
-# Comprehensive Testing Guide for Local Voice AI
+# Testing Guide for Local Voice AI
 
-This guide provides step-by-step instructions to test your complete Local Voice AI setup, including the Python 3.12.9 updates, fork configuration, documentation system, and validation scripts.
+## Overview
+
+This guide covers testing strategies and procedures for Local Voice AI, including both Docker and Kubernetes deployments. It provides comprehensive testing approaches for unit tests, integration tests, end-to-end tests, and performance tests.
 
 ## Table of Contents
 
-1. [Prerequisites](#prerequisites)
-2. [Documentation System Testing](#documentation-system-testing)
-3. [Local Development Testing](#local-development-testing)
-4. [Git Workflow Testing](#git-workflow-testing)
-5. [End-to-End Voice Assistant Testing](#end-to-end-voice-assistant-testing)
+1. [Testing Philosophy](#testing-philosophy)
+2. [Docker Testing](#docker-testing)
+3. [Kubernetes Testing](#kubernetes-testing)
+4. [Test Categories](#test-categories)
+5. [Test Automation](#test-automation)
 6. [Performance Testing](#performance-testing)
-7. [Troubleshooting](#troubleshooting)
-8. [Testing Checklist](#testing-checklist)
+7. [GPU Testing](#gpu-testing)
+8. [Troubleshooting Tests](#troubleshooting-tests)
 
-## Prerequisites
+## Testing Philosophy
 
-Before starting, ensure you have:
+### Principles
 
-- Docker and Docker Compose installed
-- Python 3.12.9 (for local testing)
-- Git configured with your fork
-- At least 12GB of RAM available
-- VS Code (optional, for Git workflow testing)
+1. **Test Early, Test Often**: Integrate testing throughout the development lifecycle
+2. **Comprehensive Coverage**: Test all components and their interactions
+3. **Automated Testing**: Automate as much as possible for consistency
+4. **Real-World Scenarios**: Test with realistic data and usage patterns
+5. **Performance Focus**: Monitor and test performance continuously
 
-## Documentation System Testing
+### Test Pyramid
 
-The documentation validation script ensures all documentation is consistent, up-to-date, and properly referenced.
+```
+    /\
+   /  \  E2E Tests (Few, High Value)
+  /____\
+ /      \ Integration Tests (Moderate, Medium Value)
+/________\
+Unit Tests (Many, Low Value)
+```
 
-### Basic Validation
+## Docker Testing
+
+### Quick Start
 
 ```bash
-# Run basic documentation validation
-python3 scripts/validate-docs.py
+# Run all tests
+./verify-setup.sh
+
+# Run specific test categories
+./verify-setup.sh --unit
+./verify-setup.sh --integration
+./verify-setup.sh --e2e
 ```
 
-**Expected Output:**
-```
-🔍 Validating Local Voice AI documentation...
-==================================================
+### Unit Testing
 
-📁 Checking required files...
-  ✅ index.md
-  ✅ architecture.md
-  ✅ development-workflow.md
-  ✅ coding-standards.md
-  ✅ lessons-learned.md
-  ✅ services/agent.md
-  ✅ services/whisper.md
-  ✅ services/ollama.md
-  ✅ services/kokoro.md
-  ✅ services/livekit.md
-  ✅ services/frontend.md
-
-🔗 Validating cross-references...
-📝 Validating markdown links...
-🐍 Validating docstring standards...
-
-==================================================
-📊 VALIDATION RESULTS
-==================================================
-
-✅ All checks passed! Documentation is valid.
-
-📈 Summary: 0 errors, 0 warnings
-```
-
-### Timestamp Validation
+#### Frontend Tests
 
 ```bash
-# Check if documentation is newer than source code
-python3 scripts/validate-docs.py --check-timestamps
+# Navigate to frontend directory
+cd voice-assistant-frontend
+
+# Install dependencies
+npm install
+
+# Run unit tests
+npm test
+
+# Run tests with coverage
+npm test -- --coverage
 ```
 
-**Expected Output:**
-```
-⏰ Validating documentation timestamps...
-ℹ️  INFO (5):
-  • Documentation current: services/agent.md is up to date with agent/myagent.py
-  • Documentation current: services/whisper.md is up to date with whisper/Dockerfile
-  • Documentation current: services/ollama.md is up to date with ollama/Dockerfile
-  • Documentation current: architecture.md is up to date with docker-compose.yml
-  • Documentation current: index.md is up to date with README.md
-```
-
-### Strict Timestamp Validation
+#### Backend Tests
 
 ```bash
-# Strict timestamp checking (treat outdated docs as errors)
-python3 scripts/validate-docs.py --check-timestamps --strict
+# Navigate to agent directory
+cd agent
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Run unit tests
+python -m pytest tests/
+
+# Run tests with coverage
+python -m pytest tests/ --cov=agent
 ```
 
-**Expected Output:**
-```
-⏰ Validating documentation timestamps...
-
-==================================================
-📊 VALIDATION RESULTS
-==================================================
-
-✅ No errors found. 0 warnings to review.
-
-📈 Summary: 0 errors, 0 warnings
-```
-
-### Updating Timestamps
-
-If documentation is outdated, you can update timestamps:
+#### Service Tests
 
 ```bash
-# Update documentation timestamps after validation
-python3 scripts/validate-docs.py --check-timestamps --update-timestamps
+# Test Ollama service
+cd ollama
+python -m pytest tests/
+
+# Test Whisper service
+cd whisper
+python -m pytest tests/
+
+# Test Kokoro service
+cd kokoro
+python -m pytest tests/
 ```
 
-**Expected Output:**
-```
-⏰ Validating documentation timestamps...
-📝 Updating 2 documentation file timestamps...
-ℹ️  INFO (2):
-  • Updated timestamp for services/agent.md
-  • Updated timestamp for services/whisper.md
-```
-
-## Local Development Testing
-
-### Full Stack Testing
+### Integration Testing
 
 ```bash
-# Test the complete application stack
-./test.sh
+# Run integration tests
+./verify-setup.sh --integration
+
+# Test service interactions
+./scripts/test-integration.sh
+
+# Test API endpoints
+./scripts/test-api.sh
 ```
 
-**Expected Output:**
-```
-🧹 Cleaning up any existing containers...
-[+] Running 0/0
-✔ Container local-voice-ai-whisper-1  Removed
-...
-
-📦 Building and starting all services...
-[+] Building 0/0
-[+] Building agent (0.1s)
-[+] Building frontend (0.1s)
-...
-[+] Running 6/6
-✔ Container local-voice-ai-livekit-1    Started
-✔ Container local-voice-ai-kokoro-1     Started
-✔ Container local-voice-ai-whisper-1    Started
-✔ Container local-voice-ai-ollama-1     Started
-✔ Container local-voice-ai-agent-1      Started
-✔ Container local-voice-ai-frontend-1   Started
-```
-
-After running `test.sh`, you should see all containers running without errors. Press `Ctrl+C` to stop the containers.
-
-### Individual Component Testing
+### End-to-End Testing
 
 ```bash
-# Clean up any existing containers
-docker-compose down -v --remove-orphans
+# Run E2E tests
+./verify-setup.sh --e2e
 
-# Build and start services individually
-docker-compose up --build
+# Test complete voice workflow
+./scripts/test-voice-workflow.sh
+
+# Test with different audio formats
+./scripts/test-audio-formats.sh
 ```
 
-**Expected Container Status:**
-- `kokoro`: Running on port 8880
-- `livekit`: Running on ports 7880, 7881
-- `whisper`: Running on port 11435
-- `ollama`: Running on port 11434
-- `agent`: Connected to all services
-- `frontend`: Running on port 3000
+## Kubernetes Testing
 
-### Container Health Checks
+### Quick Start
 
 ```bash
-# Check container status
-docker-compose ps
+# Run all Kubernetes tests
+./kubernetes/scripts/test-kubernetes.sh
 
-# Check container logs for errors
-docker-compose logs agent
-docker-compose logs ollama
-docker-compose logs whisper
-docker-compose logs kokoro
-docker-compose logs livekit
-docker-compose logs frontend
+# Run specific test categories
+./kubernetes/scripts/test-kubernetes.sh connectivity
+./kubernetes/scripts/test-kubernetes.sh gpu
+./kubernetes/scripts/test-kubernetes.sh deployment
+./kubernetes/scripts/test-kubernetes.sh functionality
+./kubernetes/scripts/test-kubernetes.sh e2e
+./kubernetes/scripts/test-kubernetes.sh performance
 ```
 
-**Expected Output for `docker-compose ps`:**
-```
-NAME                          COMMAND                  SERVICE             STATUS              PORTS
-local-voice-ai-agent-1        "python myagent.py"      agent               running (healthy)   
-local-voice-ai-frontend-1     "docker-entrypoint.s…"   frontend            running (healthy)   0.0.0.0:3000->3000/tcp
-local-voice-ai-kokoro-1       "uvicorn main:app --…"   kokoro              running (healthy)   0.0.0.0:8880->8880/tcp
-local-voice-ai-livekit-1      "/livekit-server --d…"   livekit             running (healthy)   0.0.0.0:7880->7880/tcp, 0.0.0.0:7881->7881/tcp
-local-voice-ai-ollama-1       "./entrypoint.sh"        ollama              running (healthy)   0.0.0.0:11434->11434/tcp
-local-voice-ai-whisper-1       "python -m vox_box"     whisper             running (healthy)   0.0.0.0:11435->80/tcp
-```
-
-## Git Workflow Testing
-
-### Verify Fork Configuration
+### Cluster Connectivity Testing
 
 ```bash
-# Check your remote configuration
-git remote -v
+# Test cluster connectivity
+./kubernetes/scripts/test-kubernetes.sh connectivity
+
+# Verify all pods are running
+kubectl get pods -n voice-ai
+
+# Check service endpoints
+kubectl get endpoints -n voice-ai
 ```
 
-**Expected Output:**
-```
-origin	https://github.com/matlowai/local-voice-ai.git (fetch)
-origin	https://github.com/matlowai/local-voice-ai.git (push)
-upstream	https://github.com/ShayneP/local-voice-ai.git (fetch)
-upstream	https://github.com/ShayneP/local-voice-ai.git (push)
-```
-
-### Check Branch Tracking
+### GPU Testing
 
 ```bash
-# Verify branch tracking
-git branch -vv
+# Test GPU availability
+./kubernetes/scripts/test-kubernetes.sh gpu
+
+# Check GPU utilization
+kubectl exec -n voice-ai deployment/ollama -- nvidia-smi
+
+# Test GPU memory allocation
+kubectl exec -n voice-ai deployment/ollama -- nvidia-smi --query-gpu=memory.used,memory.total
 ```
 
-**Expected Output:**
-```
-* main abc1234f [origin/main] Your latest commit message
-```
-
-### Test Sync with Upstream
+### Service Deployment Testing
 
 ```bash
-# Fetch latest changes from upstream
-git fetch upstream
+# Test service deployment
+./kubernetes/scripts/test-kubernetes.sh deployment
 
-# Check for new changes
-git log --oneline --graph --all --decorate
+# Verify all services are running
+kubectl get pods -n voice-ai
+
+# Check service health
+kubectl get pods -n voice-ai -o wide
 ```
 
-### Test Pushing to Fork
+### Service Connectivity Testing
 
 ```bash
-# Create a test branch
-git checkout -b test/sync-validation
+# Test service connectivity
+./kubernetes/scripts/test-kubernetes.sh connectivity
 
-# Make a small change
-echo "# Test Change" >> TEST_SYNC.md
-
-# Commit and push to your fork
-git add TEST_SYNC.md
-git commit -m "Test: Verify sync to fork works"
-git push origin test/sync-validation
-
-# Clean up (optional)
-git checkout main
-git branch -D test/sync-validation
+# Test internal service communication
+kubectl exec -n voice-ai deployment/agent -- curl http://ollama.voice-ai.svc.cluster.local:11434/api/tags
 ```
 
-**Expected Output:**
-```
-Enumerating objects: 4, done.
-Counting objects: 100% (4/4), done.
-Delta compression using up to 8 threads
-Compressing objects: 100% (2/2), done.
-Writing objects: 100% (3/3), 282 bytes | 282.00 KiB/s, done.
-Total 3 (delta 1), reused 0 (delta 0), pack-reused 0
-To https://github.com/matlowai/local-voice-ai.git
- * [new branch]      test/sync-validation -> test/sync-validation
-```
-
-### VS Code Integration Test
-
-1. Open VS Code
-2. Make a small change to any file
-3. Use the Source Control view to commit the change
-4. Click the "Sync Changes" button
-5. Verify the change appears in your fork on GitHub
-
-## End-to-End Voice Assistant Testing
-
-### 1. Verify Frontend Access
-
-Open your browser and navigate to: [http://localhost:3000](http://localhost:3000)
-
-**Expected:**
-- The voice assistant interface loads
-- No error messages in the browser console
-- Microphone permission request appears when you click the microphone button
-
-### 2. Test Service Connectivity
-
-Check that all services are communicating:
+### AI Service Functionality Testing
 
 ```bash
-# Test LiveKit connection
-curl http://localhost:7880
+# Test AI service functionality
+./kubernetes/scripts/test-kubernetes.sh functionality
 
-# Test Ollama connection
-curl http://localhost:11434/api/tags
+# Test Ollama API
+kubectl exec -n voice-ai deployment/ollama -- curl -s http://localhost:11434/api/tags
 
-# Test Whisper connection
-curl http://localhost:11435/health
+# Test Whisper API
+kubectl exec -n voice-ai deployment/whisper -- curl -s http://localhost:80/health
 
-# Test Kokoro connection
-curl http://localhost:8880/health
+# Test Kokoro API
+kubectl exec -n voice-ai deployment/kokoro -- curl -s http://localhost:8880/health
+
+# Test Agent API
+kubectl exec -n voice-ai deployment/agent -- curl -s http://localhost:8080/health
 ```
 
-**Expected Output for Ollama:**
-```json
-{
-  "models": [
-    {
-      "name": "gemma2:9b",
-      "modified_at": "2024-01-01T00:00:00.000000Z",
-      "size": 1234567890,
-      "digest": "sha256:...",
-      "details": {
-        "format": "gguf",
-        "family": "gemma",
-        "families": null,
-        "parameter_size": "9b",
-        "quantization_level": "q4_0"
-      }
-    }
-  ]
-}
-```
-
-### 3. Test Voice Input/Output Pipeline
-
-1. **Grant Microphone Permission**
-   - Click the microphone button in the UI
-   - Allow browser access to your microphone
-
-2. **Test Speech-to-Text**
-   - Speak clearly into the microphone
-   - Verify your speech appears as text in the interface
-
-3. **Test LLM Processing**
-   - After speaking, wait for the agent to process
-   - Check the agent logs: `docker-compose logs -f agent`
-
-4. **Test Text-to-Speech**
-   - Verify the agent responds with voice
-   - Check that the audio plays through your speakers
-
-### 4. Test RAG Functionality
-
-The agent should use documents in the `agent/docs/` directory for enhanced responses:
+### End-to-End Workflow Testing
 
 ```bash
-# Check what documents are loaded
-docker-compose exec agent ls -la /app/docs/
+# Test end-to-end workflow
+./kubernetes/scripts/test-kubernetes.sh e2e
+
+# Test complete voice workflow in Kubernetes
+./kubernetes/scripts/test-voice-workflow-k8s.sh
 ```
 
-**Expected Output:**
+### Performance Testing
+
+```bash
+# Test performance
+./kubernetes/scripts/test-kubernetes.sh performance
+
+# Benchmark GPU performance
+./kubernetes/scripts/benchmark-gpu.sh
+
+# Test concurrent users
+./kubernetes/scripts/test-load.sh
 ```
-total 24
-drwxr-xr-x 1 root root 4096 Jan  1 00:00 .
-drwxr-xr-x 1 root root 4096 Jan  1 00:00 ..
--rw-r--r-- 1 root root 1234 Jan  1 00:00 doc.txt
--rw-r--r-- 1 root root 5678 Jan  1 00:00 llm.txt
--rw-r--r-- 1 root root 9012 Jan  1 00:00 search.txt
--rw-r--r-- 1 root root 3456 Jan  1 00:00 stt.txt
--rw-r--r-- 1 root root 7890 Jan  1 00:00 tts.txt
+
+### CPU Fallback Testing
+
+```bash
+# Test CPU fallback
+./kubernetes/scripts/test-kubernetes.sh fallback
+
+# Switch to CPU mode
+./kubernetes/scripts/switch-to-cpu.sh switch-cpu
+
+# Test CPU performance
+./kubernetes/scripts/benchmark-cpu.sh
+
+# Switch back to GPU
+./kubernetes/scripts/switch-to-cpu.sh switch-gpu
+```
+
+## Test Categories
+
+### Unit Tests
+
+#### Purpose
+- Test individual components in isolation
+- Verify specific functionality
+- Fast feedback loop
+
+#### Examples
+```bash
+# Frontend component tests
+cd voice-assistant-frontend
+npm test -- --testPathPattern=Button
+
+# Backend function tests
+cd agent
+python -m pytest tests/test_agent_functions.py
+
+# Service model tests
+cd ollama
+python -m pytest tests/test_models.py
+```
+
+### Integration Tests
+
+#### Purpose
+- Test component interactions
+- Verify API endpoints
+- Test data flow between services
+
+#### Examples
+```bash
+# Test service integration
+./scripts/test-service-integration.sh
+
+# Test API integration
+./scripts/test-api-integration.sh
+
+# Test database integration
+./scripts/test-db-integration.sh
+```
+
+### End-to-End Tests
+
+#### Purpose
+- Test complete user workflows
+- Verify system behavior
+- Test real-world scenarios
+
+#### Examples
+```bash
+# Test voice workflow
+./scripts/test-voice-workflow.sh
+
+# Test web interface
+./scripts/test-web-interface.sh
+
+# Test mobile compatibility
+./scripts/test-mobile-compatibility.sh
+```
+
+### Performance Tests
+
+#### Purpose
+- Measure response times
+- Test system under load
+- Identify bottlenecks
+
+#### Examples
+```bash
+# Benchmark GPU performance
+./kubernetes/scripts/benchmark-gpu.sh
+
+# Test concurrent users
+./scripts/test-concurrent-users.sh
+
+# Test memory usage
+./scripts/test-memory-usage.sh
+```
+
+## Test Automation
+
+### CI/CD Integration
+
+#### GitHub Actions
+
+```yaml
+# .github/workflows/test.yml
+name: Test
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+    - name: Set up Python
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+    - name: Run tests
+      run: |
+        python -m pytest tests/
+```
+
+#### Pre-commit Hooks
+
+```bash
+# Install pre-commit
+pip install pre-commit
+
+# Set up pre-commit
+pre-commit install
+
+# Run pre-commit
+pre-commit run --all-files
+```
+
+### Automated Testing Scripts
+
+```bash
+#!/bin/bash
+# scripts/run-all-tests.sh
+
+echo "Running all tests..."
+
+# Run unit tests
+echo "Running unit tests..."
+./scripts/run-unit-tests.sh
+
+# Run integration tests
+echo "Running integration tests..."
+./scripts/run-integration-tests.sh
+
+# Run E2E tests
+echo "Running E2E tests..."
+./scripts/run-e2e-tests.sh
+
+# Run performance tests
+echo "Running performance tests..."
+./scripts/run-performance-tests.sh
+
+echo "All tests completed."
 ```
 
 ## Performance Testing
 
-### Memory Usage Check
+### GPU Performance Testing
 
 ```bash
-# Check memory usage of all containers
-docker stats --no-stream
+# Benchmark GPU models
+./kubernetes/scripts/benchmark-gpu.sh
+
+# Test GPU memory usage
+kubectl exec -n voice-ai deployment/ollama -- nvidia-smi --query-gpu=memory.used,memory.total
+
+# Monitor GPU utilization
+watch -n 1 'kubectl exec -n voice-ai deployment/ollama -- nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits'
 ```
 
-**Expected Output:**
-```
-CONTAINER ID   NAME                  CPU %     MEM USAGE / LIMIT     MEM %
-abc123def456   local-voice-ai-agent-1    5.2%     512MiB / 12GiB       4.2%
-def456ghi789   local-voice-ai-ollama-1   10.5%    6GiB / 12GiB         50.0%
-ghi789jkl012   local-voice-ai-whisper-1  8.3%     1GiB / 12GiB         8.3%
-...
+### Load Testing
+
+```bash
+# Test concurrent users
+./scripts/test-concurrent-users.sh
+
+# Test with JMeter
+./scripts/test-jmeter.sh
+
+# Test with k6
+./scripts/test-k6.sh
 ```
 
 ### Response Time Testing
 
-1. **Cold Start Test**
-   - Stop all containers: `docker-compose down`
-   - Restart with: `./test.sh`
-   - Time how long it takes for all services to be ready (should be < 2 minutes)
-
-2. **Voice Response Latency**
-   - Speak a simple question
-   - Measure time from end of speech to start of agent response
-   - Should be < 10 seconds for simple queries
-
-## Troubleshooting
-
-### Common Issues and Solutions
-
-#### 1. Documentation Validation Errors
-
-**Issue:** "Invalid reference in file.md"
-**Solution:**
 ```bash
-# Fix broken references
-python3 scripts/fix-docs-references.py
+# Test API response times
+./scripts/test-response-times.sh
 
-# Re-run validation
-python3 scripts/validate-docs.py
+# Test WebSocket performance
+./scripts/test-websocket-performance.sh
+
+# Test audio processing latency
+./scripts/test-audio-latency.sh
 ```
 
-#### 2. Container Build Failures
+## GPU Testing
 
-**Issue:** Docker build fails for a service
-**Solution:**
-```bash
-# Check build logs
-docker-compose build --no-cache agent
-
-# Rebuild specific service
-docker-compose up --build --force-recreate agent
-```
-
-#### 3. Port Conflicts
-
-**Issue:** "Port already in use" errors
-**Solution:**
-```bash
-# Find what's using the port
-sudo lsof -i :3000  # Replace with conflicting port
-
-# Kill the process
-sudo kill -9 <PID>
-
-# Or change ports in docker-compose.yml
-```
-
-#### 4. Ollama Model Not Loading
-
-**Issue:** Ollama can't find the model
-**Solution:**
-```bash
-# Check available models
-docker-compose exec ollama ollama list
-
-# Pull required model
-docker-compose exec ollama ollama pull gemma2:9b
-```
-
-#### 5. Microphone Not Working
-
-**Issue:** Voice input not detected
-**Solution:**
-1. Check browser microphone permissions
-2. Verify microphone works with other apps
-3. Check browser console for errors
-4. Try a different browser (Chrome/Edge recommended)
-
-#### 6. Agent Not Responding
-
-**Issue:** Agent processes but doesn't respond
-**Solution:**
-```bash
-# Check agent logs
-docker-compose logs agent
-
-# Check if agent is connected to LiveKit
-docker-compose exec agent curl http://livekit:7880
-```
-
-### Debug Mode
-
-For detailed debugging, enable verbose logging:
+### GPU Availability Testing
 
 ```bash
-# Set environment variables for debug mode
-export DEBUG=true
-export LOG_LEVEL=debug
+# Check GPU availability
+./kubernetes/scripts/test-kubernetes.sh gpu
 
-# Restart with debug logging
-docker-compose down
-docker-compose up --build
+# Verify GPU device plugin
+kubectl get pods -n gpu-operator
+
+# Test GPU allocation
+kubectl get nodes "-o=custom-columns=NAME:.metadata.name,GPU:.status.allocatable.nvidia\.com/gpu"
 ```
 
-## Testing Checklist
-
-Use this checklist to verify your complete setup is working:
-
-- [ ] **Documentation Validation**
-  - [ ] Basic validation passes: `python3 scripts/validate-docs.py`
-  - [ ] Timestamp validation passes: `python3 scripts/validate-docs.py --check-timestamps`
-  - [ ] Strict validation passes: `python3 scripts/validate-docs.py --check-timestamps --strict`
-  - [ ] All required documentation files exist
-  - [ ] All cross-references are valid
-
-- [ ] **Container Infrastructure**
-  - [ ] All containers build successfully: `./test.sh`
-  - [ ] All services start without errors
-  - [ ] Container health checks pass
-  - [ ] Memory usage is within limits
-  - [ ] No port conflicts
-
-- [ ] **Service Connectivity**
-  - [ ] LiveKit server responds on port 7880
-  - [ ] Ollama API responds on port 11434
-  - [ ] Whisper service responds on port 11435
-  - [ ] Kokoro TTS responds on port 8880
-  - [ ] Frontend loads on port 3000
-
-- [ ] **Voice Assistant Pipeline**
-  - [ ] Frontend loads correctly in browser
-  - [ ] Microphone permission works
-  - [ ] Speech-to-text converts voice to text
-  - [ ] LLM processes queries correctly
-  - [ ] Text-to-speech generates audio responses
-  - [ ] RAG functionality uses documents
-
-- [ ] **Git Workflow**
-  - [ ] Fork remote points to correct repository
-  - [ ] Upstream remote points to original repository
-  - [ ] Main branch tracks origin/main
-  - [ ] Can push changes to fork
-  - [ ] Can pull changes from upstream
-  - [ ] VS Code sync button works
-
-- [ ] **Performance**
-  - [ ] Cold start time < 2 minutes
-  - [ ] Voice response latency < 10 seconds
-  - [ ] Memory usage stays within limits
-  - [ ] No significant CPU spikes during normal operation
-
-## Final Verification
-
-After completing all tests, run this final verification script:
+### GPU Performance Testing
 
 ```bash
-#!/bin/bash
-echo "🧪 Running final verification tests..."
+# Benchmark GPU models
+./kubernetes/scripts/benchmark-gpu.sh
 
-# 1. Documentation validation
-echo "1. Testing documentation validation..."
-python3 scripts/validate-docs.py --check-timestamps --strict
-if [ $? -ne 0 ]; then
-    echo "❌ Documentation validation failed"
-    exit 1
-fi
+# Test GPU memory allocation
+kubectl exec -n voice-ai deployment/ollama -- nvidia-smi --query-gpu=memory.used,memory.total
 
-# 2. Container health
-echo "2. Checking container health..."
-docker-compose ps | grep -q "Up (healthy)"
-if [ $? -ne 0 ]; then
-    echo "❌ Some containers are not healthy"
-    docker-compose ps
-    exit 1
-fi
-
-# 3. Service connectivity
-echo "3. Testing service connectivity..."
-curl -s http://localhost:3000 > /dev/null
-if [ $? -ne 0 ]; then
-    echo "❌ Frontend not accessible"
-    exit 1
-fi
-
-curl -s http://localhost:11434/api/tags > /dev/null
-if [ $? -ne 0 ]; then
-    echo "❌ Ollama not accessible"
-    exit 1
-fi
-
-# 4. Git configuration
-echo "4. Verifying Git configuration..."
-git remote -v | grep -q "origin.*matlowai"
-if [ $? -ne 0 ]; then
-    echo "❌ Origin remote not configured correctly"
-    exit 1
-fi
-
-git remote -v | grep -q "upstream.*ShayneP"
-if [ $? -ne 0 ]; then
-    echo "❌ Upstream remote not configured correctly"
-    exit 1
-fi
-
-echo "✅ All verification tests passed!"
-echo "🎉 Your Local Voice AI setup is ready to use!"
+# Monitor GPU temperature
+kubectl exec -n voice-ai deployment/ollama -- nvidia-smi --query-gpu=temperature.gpu
 ```
 
-Save this as `verify-setup.sh` and run it to confirm everything is working:
+### GPU Stress Testing
 
 ```bash
-chmod +x verify-setup.sh
-./verify-setup.sh
+# Stress test GPU
+./scripts/stress-test-gpu.sh
+
+# Test GPU under load
+./scripts/test-gpu-load.sh
+
+# Monitor GPU stability
+watch -n 5 'kubectl exec -n voice-ai deployment/ollama -- nvidia-smi'
 ```
 
-If all tests pass, your Local Voice AI setup is fully functional and ready for use!
+## Troubleshooting Tests
+
+### Common Issues
+
+#### Test Failures
+
+```bash
+# Check test logs
+./kubernetes/scripts/test-kubernetes.sh 2>&1 | tee test.log
+
+# Check pod status
+kubectl get pods -n voice-ai
+
+# Check service logs
+kubectl logs -f deployment/ollama -n voice-ai
+```
+
+#### GPU Issues
+
+```bash
+# Check GPU drivers
+nvidia-smi
+
+# Check GPU device plugin
+kubectl get pods -n gpu-operator
+
+# Restart GPU services
+kubectl rollout restart deployment/gpu-operator -n gpu-operator
+```
+
+#### Performance Issues
+
+```bash
+# Check resource usage
+kubectl top pods -n voice-ai
+
+# Check node resources
+kubectl top nodes
+
+# Monitor GPU usage
+kubectl exec -n voice-ai deployment/ollama -- nvidia-smi
+```
+
+### Debugging Tools
+
+#### Stern for Log Aggregation
+
+```bash
+# Install stern
+curl https://get.stern.sh | sh
+
+# View logs for all services
+stern -n voice-ai .
+
+# View logs for specific service
+stern -n voice-ai ollama
+```
+
+#### K9s for Cluster Management
+
+```bash
+# Install k9s
+curl -sS https://webinstall.dev/k9s | sh
+
+# Launch k9s
+k9s -n voice-ai
+```
+
+#### Lens for GUI Management
+
+```bash
+# Download and install Lens
+# https://k8slens.dev/
+
+# Connect to your cluster
+# Navigate to voice-ai namespace
+```
+
+## Best Practices
+
+### Test Organization
+
+1. **Structure Tests**: Organize tests by category and component
+2. **Naming Conventions**: Use clear, descriptive test names
+3. **Test Documentation**: Document test purpose and expected results
+4. **Version Control**: Keep tests under version control
+
+### Test Data Management
+
+1. **Test Data**: Use realistic but anonymized test data
+2. **Data Cleanup**: Clean up test data after tests
+3. **Data Isolation**: Isolate test data from production data
+4. **Data Versioning**: Version test data alongside code
+
+### Test Environment
+
+1. **Consistent Environment**: Keep test environment consistent
+2. **Environment Isolation**: Isolate test from production
+3. **Environment Monitoring**: Monitor test environment health
+4. **Environment Cleanup**: Clean up test environment after tests
+
+### Test Reporting
+
+1. **Test Results**: Report test results clearly
+2. **Test Metrics**: Track test metrics over time
+3. **Test Trends**: Monitor test trends and patterns
+4. **Test Alerts**: Set up alerts for test failures
+
+## Conclusion
+
+This testing guide provides comprehensive testing strategies for Local Voice AI in both Docker and Kubernetes deployments. By following these guidelines, you can ensure the reliability, performance, and quality of your voice AI system.
+
+Regular testing is essential for maintaining system health and identifying issues early. Make testing a regular part of your development workflow to ensure the best possible user experience.
+
+For more specific testing scenarios or troubleshooting help, refer to the other documentation files or create an issue in the repository.

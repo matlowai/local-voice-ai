@@ -1,0 +1,582 @@
+---
+# Network Policies for Local Voice AI
+# Implements zero-trust networking within the cluster
+
+---
+# Default Deny All Traffic (Baseline Security Policy)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: default-deny-all
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector: {}
+  policyTypes:
+  - Ingress
+  - Egress
+  # By default, deny all ingress and egress traffic
+  # Specific policies will whitelist allowed traffic
+
+---
+# Allow DNS Resolution (Required for all services)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-dns
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: allow-dns
+    app.kubernetes.io/component: security
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector: {}
+  policyTypes:
+  - Egress
+  egress:
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# LiveKit Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: livekit-network-policy
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: livekit
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: livekit
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from frontend
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: frontend
+    ports:
+    - protocol: TCP
+      port: 7880
+    - protocol: TCP
+      port: 7881
+  # Allow traffic from agent
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: agent
+    ports:
+    - protocol: TCP
+      port: 7880
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 7880
+    - protocol: TCP
+      port: 7881
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+
+---
+# Ollama Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ollama-network-policy
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: ollama
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from agent
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: agent
+    ports:
+    - protocol: TCP
+      port: 11434
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow outbound connections to download models
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 80   # HTTP
+
+---
+# Whisper Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: whisper-network-policy
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: whisper
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from agent
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: agent
+    ports:
+    - protocol: TCP
+      port: 11435
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow outbound connections to download models
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 80   # HTTP
+
+---
+# Kokoro Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: kokoro-network-policy
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: kokoro
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: kokoro
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from agent
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: agent
+    ports:
+    - protocol: TCP
+      port: 8880
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow outbound connections to download models
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 80   # HTTP
+
+---
+# Agent Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: agent-network-policy
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: agent
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from LiveKit
+  - from:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: livekit
+    ports:
+    - protocol: TCP
+      port: 8080
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow traffic to LiveKit
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: livekit
+    ports:
+    - protocol: TCP
+      port: 7880
+  # Allow traffic to Ollama
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: ollama
+    ports:
+    - protocol: TCP
+      port: 11434
+  # Allow traffic to Whisper
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: whisper
+    ports:
+    - protocol: TCP
+      port: 11435
+  # Allow traffic to Kokoro
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: kokoro
+    ports:
+    - protocol: TCP
+      port: 8880
+
+---
+# Frontend Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: frontend-network-policy
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow traffic to LiveKit
+  - to:
+    - podSelector:
+        matchLabels:
+          app.kubernetes.io/name: livekit
+    ports:
+    - protocol: TCP
+      port: 7880
+
+---
+# Monitoring Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: monitoring-network-policy
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: monitoring
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from ingress controller (for Grafana UI)
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000  # Grafana
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow scraping metrics from all namespaces
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 8080  # Metrics endpoint
+    - protocol: TCP
+      port: 9400  # DCGM exporter
+
+---
+# Cross-Namespace Monitoring Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-scraping
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: allow-monitoring
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector: {}  # All pods in voice-ai namespace
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow monitoring namespace to scrape metrics
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: monitoring
+    ports:
+    - protocol: TCP
+      port: 8080  # Metrics endpoint
+    - protocol: TCP
+      port: 9400  # DCGM exporter
+
+---
+# GPU Operator Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: gpu-operator-network-policy
+  namespace: gpu-operator
+  labels:
+    app.kubernetes.io/name: gpu-operator
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: gpu-operator
+  policyTypes:
+  - Ingress
+  - Egress
+  ingress:
+  # Allow traffic from all pods that need GPU access
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: voice-ai
+  egress:
+  # Allow DNS
+  - to: []
+    ports:
+    - protocol: UDP
+      port: 53
+    - protocol: TCP
+      port: 53
+  # Allow outbound connections for GPU driver management
+  - to: []
+    ports:
+    - protocol: TCP
+      port: 443  # HTTPS
+    - protocol: TCP
+      port: 80   # HTTP
+
+---
+# Ingress Controller Network Policy
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: ingress-controller-network-policy
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ingress-controller
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector: {}  # Target all pods
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow traffic from ingress controller to all services
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000  # Frontend
+    - protocol: TCP
+      port: 7880  # LiveKit
+    - protocol: TCP
+      port: 7881  # LiveKit TLS
+
+---
+# Network Policy for External Access (Limited)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: external-access-policy
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: external-access
+    app.kubernetes.io/component: network-policy
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: frontend
+  policyTypes:
+  - Ingress
+  ingress:
+  # Allow external access only through ingress controller
+  - from:
+    - namespaceSelector:
+        matchLabels:
+          name: ingress-nginx
+    ports:
+    - protocol: TCP
+      port: 3000
+
+---
+# ConfigMap for Network Policy Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: network-policy-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: network-policy-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  config.yaml: |
+    # Network Policy Configuration
+    
+    # Security Levels
+    security_levels:
+      high:
+        # Maximum security - deny all by default
+        default_deny: true
+        allow_inter_namespace: false
+        allow_external: false
+        logging: "verbose"
+      
+      medium:
+        # Balanced security
+        default_deny: true
+        allow_inter_namespace: true  # monitoring only
+        allow_external: true        # through ingress only
+        logging: "info"
+      
+      low:
+        # Development mode
+        default_deny: false
+        allow_inter_namespace: true
+        allow_external: true
+        logging: "warn"
+    
+    # Port Configuration
+    allowed_ports:
+      frontend:
+        - 3000  # HTTP
+      livekit:
+        - 7880  # HTTP
+        - 7881  # HTTPS
+      ollama:
+        - 11434 # API
+      whisper:
+        - 11435 # API
+      kokoro:
+        - 8880  # API
+      agent:
+        - 8080  # API
+      monitoring:
+        - 3000  # Grafana
+        - 9090  # Prometheus
+    
+    # Protocol Configuration
+    allowed_protocols:
+      - TCP
+      - UDP  # DNS only
+    
+    # Timeouts and Limits
+    timeouts:
+      connection_timeout: "30s"
+      read_timeout: "60s"
+      write_timeout: "60s"
+    
+    # Rate Limiting
+    rate_limiting:
+      enabled: true
+      requests_per_minute: 100
+      burst_size: 20

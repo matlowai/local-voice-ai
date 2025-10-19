@@ -1,0 +1,289 @@
+---
+# Storage Configuration for Local Voice AI
+# Uses local-path storage for K3s
+
+---
+# Note: K3s already provides a "local-path" StorageClass
+# We'll use the existing one and create additional ones for different performance tiers
+
+---
+# Storage Class for High-Performance Storage (SSD optimization)
+apiVersion: storage.k8s.io/v1
+kind: StorageClass
+metadata:
+  name: local-path-ssd
+  labels:
+    app.kubernetes.io/name: local-path-ssd
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: local-voice-ai
+provisioner: rancher.io/local-path
+parameters:
+  path: "/var/lib/rancher/k3s/storage-ssd"
+  # Use SSD-specific mount options if available
+  # mountOptions: "noatime,nodiratime,discard"
+reclaimPolicy: Delete
+volumeBindingMode: WaitForFirstConsumer
+allowVolumeExpansion: true
+
+---
+# Ollama Models Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: ollama-storage
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: local-voice-ai
+    storage-type: "models"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path-ssd
+  resources:
+    requests:
+      storage: 20Gi  # Large enough for multiple models
+  # Optional: Volume mode for block devices
+  # volumeMode: Filesystem
+
+---
+# Whisper Cache Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: whisper-storage
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: local-voice-ai
+    storage-type: "cache"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path-ssd
+  resources:
+    requests:
+      storage: 10Gi  # For model cache and temporary files
+
+---
+# Kokoro TTS Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: kokoro-storage
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: kokoro
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: local-voice-ai
+    storage-type: "models"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path-ssd
+  resources:
+    requests:
+      storage: 5Gi  # For TTS models and voice data
+
+---
+# Agent RAG Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: agent-storage
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: local-voice-ai
+    storage-type: "rag"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 2Gi  # For RAG embeddings and documents
+
+---
+# Shared Temporary Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: temp-storage
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: temp-storage
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: local-voice-ai
+    storage-type: "temp"
+spec:
+  accessModes:
+    - ReadWriteMany  # Allow multiple pods to access
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 5Gi  # For temporary files and shared data
+
+---
+# Monitoring Storage
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: monitoring-storage
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: local-voice-ai
+    storage-type: "metrics"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 10Gi  # For Prometheus data and logs
+
+---
+# Backup Storage (for future backup functionality)
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: backup-storage
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: backup
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: local-voice-ai
+    storage-type: "backup"
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 50Gi  # For backups of models and data
+
+---
+# ConfigMaps for Storage Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storage-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: storage-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  storage.yaml: |
+    # Storage paths and configurations
+    paths:
+      ollama: "/models/ollama"
+      whisper: "/models/whisper"
+      kokoro: "/models/kokoro"
+      agent: "/data/agent"
+      temp: "/tmp/shared"
+      backup: "/backup"
+    
+    # Storage quotas (in GB)
+    quotas:
+      ollama: 20
+      whisper: 10
+      kokoro: 5
+      agent: 2
+      temp: 5
+      backup: 50
+    
+    # Cleanup policies
+    cleanup:
+      temp_retention: "24h"
+      log_retention: "7d"
+      backup_retention: "30d"
+      cache_retention: "7d"
+    
+    # Performance settings
+    performance:
+      enable_compression: true
+      enable_encryption: false
+      cache_size: "1GB"
+      max_file_size: "1GB"
+
+---
+# Volume Snapshots Class (for backup functionality)
+# Note: This requires snapshot CRDs to be installed first
+# Use: kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotclasses.yaml
+#      kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshots.yaml
+#      kubectl apply -f https://raw.githubusercontent.com/kubernetes-csi/external-snapshotter/master/client/config/crd/snapshot.storage.k8s.io_volumesnapshotcontents.yaml
+apiVersion: snapshot.storage.k8s.io/v1
+kind: VolumeSnapshotClass
+metadata:
+  name: local-path-snapshot
+  labels:
+    app.kubernetes.io/name: local-path-snapshot
+    app.kubernetes.io/component: storage
+    app.kubernetes.io/part-of: local-voice-ai
+driver: rancher.io/local-path
+deletionPolicy: Delete
+
+---
+# Example Volume Snapshot (commented out by default)
+# apiVersion: snapshot.storage.k8s.io/v1
+# kind: VolumeSnapshot
+# metadata:
+#   name: ollama-snapshot
+#   namespace: voice-ai
+#   labels:
+#     app.kubernetes.io/name: ollama-snapshot
+#     app.kubernetes.io/component: backup
+#     app.kubernetes.io/part-of: local-voice-ai
+# spec:
+#   volumeSnapshotClassName: local-path-snapshot
+#   source:
+#     persistentVolumeClaimName: ollama-storage
+
+---
+# Storage Monitoring ConfigMap
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: storage-monitoring
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: storage-monitoring
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  storage-rules.yml: |
+    groups:
+      - name: storage.rules
+        rules:
+          - alert: PVCNearlyFull
+            expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "PVC {{ $labels.persistentvolumeclaim }} is nearly full"
+              description: "PVC {{ $labels.persistentvolumeclaim }} in namespace {{ $labels.namespace }} is {{ $value | humanizePercentage }} full"
+          
+          - alert: PVCFull
+            expr: kubelet_volume_stats_used_bytes / kubelet_volume_stats_capacity_bytes > 0.95
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "PVC {{ $labels.persistentvolumeclaim }} is full"
+              description: "PVC {{ $labels.persistentvolumeclaim }} in namespace {{ $labels.namespace }} is {{ $value | humanizePercentage }} full"
+          
+          - alert: PVCAvailableSpaceLow
+            expr: kubelet_volume_stats_available_bytes < 1073741824  # 1GB
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "PVC {{ $labels.persistentvolumeclaim }} has low available space"
+              description: "PVC {{ $labels.persistentvolumeclaim }} in namespace {{ $labels.namespace }} has only {{ $value | humanizeBytes }} available"

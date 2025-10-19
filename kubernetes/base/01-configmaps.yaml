@@ -1,0 +1,362 @@
+---
+# Global Configuration for Local Voice AI
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: voice-ai-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: voice-ai
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  # Global Settings
+  LOG_LEVEL: "info"
+  ENVIRONMENT: "development"
+  TIMEZONE: "UTC"
+  
+  # Service URLs (internal)
+  LIVEKIT_HOST: "livekit.voice-ai.svc.cluster.local"
+  OLLAMA_HOST: "ollama.voice-ai.svc.cluster.local"
+  WHISPER_HOST: "whisper.voice-ai.svc.cluster.local"
+  KOKORO_HOST: "kokoro.voice-ai.svc.cluster.local"
+  AGENT_HOST: "agent.voice-ai.svc.cluster.local"
+  
+  # Service Ports
+  LIVEKIT_PORT: "7880"
+  OLLAMA_PORT: "11434"
+  WHISPER_PORT: "11435"
+  KOKORO_PORT: "8880"
+  AGENT_PORT: "8080"
+  
+  # LiveKit Configuration
+  LIVEKIT_API_KEY: "devkey"
+  LIVEKIT_API_SECRET: "secret"
+  LIVEKIT_ROOM_NAME: "voice-assistant"
+  
+  # Model Configuration
+  OLLAMA_MODEL: "gemma3:4b"
+  WHISPER_MODEL: "Systran/faster-whisper-small"
+  KOKORO_VOICE: "af_nova"
+  
+  # Performance Settings
+  MAX_CONCURRENT_USERS: "10"
+  RESPONSE_TIMEOUT: "30"
+  AUDIO_SAMPLE_RATE: "16000"
+  
+  # GPU Settings
+  GPU_ENABLED: "true"
+  GPU_MEMORY_FRACTION: "0.8"
+  CUDA_VISIBLE_DEVICES: "0"
+  
+---
+# LiveKit Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: livekit-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: livekit
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  config.yaml: |
+    port: 7880
+    http_port: 7880
+    rtc:
+      udp_port: 7882
+      tcp_port: 7881
+      use_external_ip: true
+    room:
+      auto_create: true
+      empty_timeout: 300s
+      max_participants: 20
+    key_file: ""
+    redis:
+      address: ""
+      username: ""
+      password: ""
+      db: 0
+    turn:
+      enabled: false
+      domain: ""
+      cert_file: ""
+      key_file: ""
+      tls_port: 443
+      udp_port: 3478
+    webhooks:
+      api_key: ""
+      secret: ""
+      urls: []
+---
+# Ollama Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ollama-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  OLLAMA_HOST: "0.0.0.0"
+  OLLAMA_PORT: "11434"
+  OLLAMA_ORIGINS: "*"
+  OLLAMA_MODELS: "gemma3:4b,gemma3:7b,llama3:8b"
+  OLLAMA_MAX_LOADED_MODELS: "2"
+  OLLAMA_GPU_MEMORY_FRACTION: "0.8"
+  OLLAMA_NUM_PARALLEL: "4"
+  OLLAMA_TIMEOUT: "5m"
+  OLLAMA_LOAD_TIMEOUT: "10m"
+---
+# Whisper Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: whisper-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  WHISPER_MODEL: "Systran/faster-whisper-small"
+  WHISPER_DEVICE: "cuda"
+  WHISPER_COMPUTE_TYPE: "float16"
+  WHISPER_LANGUAGE: "auto"
+  WHISPER_TASK: "transcribe"
+  WHISPER_CHUNK_LENGTH: "30"
+  WHISPER_STRIDE_LENGTH: "5"
+  WHISPER_BEAM_SIZE: "1"
+  WHISPER_TEMPERATURE: "0.0"
+  WHISPER_BEST_OF: "1"
+  WHISPER_PATIENCE: "1.0"
+  WHISPER_LENGTH_PENALTY: "1.0"
+  WHISPER_SUPPRESS_TOKENS: "-1"
+  WHISPER_INITIAL_PROMPT: ""
+  WHISPER_CONDITION_ON_PREVIOUS_TEXT: "true"
+  WHISPER_FP16: "true"
+  WHISPER_TEMPERATURE_INCREMENT_ON_FALLBACK: "0.2"
+---
+# Kokoro Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kokoro-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: kokoro
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  KOKORO_MODEL: "kokoro-v0_19.pth"
+  KOKORO_VOICE: "af_nova"
+  KOKORO_DEVICE: "cuda"
+  KOKORO_SPEED: "1.0"
+  KOKORO_PITCH: "0"
+  KOKORO_INTONATION: "1.0"
+  KOKORO_FORMAT: "wav"
+  KOKORO_SAMPLE_RATE: "22050"
+  KOKORO_MAX_LENGTH: "500"
+  KOKORO_BATCH_SIZE: "1"
+  KOKORO_USE_GPU: "true"
+  KOKORO_GPU_MEMORY_FRACTION: "0.1"
+---
+# Agent Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  # LiveKit Settings
+  LIVEKIT_HOST: "ws://livekit.voice-ai.svc.cluster.local:7880"
+  LIVEKIT_API_KEY: "devkey"
+  LIVEKIT_API_SECRET: "secret"
+  LIVEKIT_ROOM_NAME: "voice-assistant"
+  
+  # AI Service URLs
+  OLLAMA_URL: "http://ollama.voice-ai.svc.cluster.local:11434"
+  WHISPER_URL: "http://whisper.voice-ai.svc.cluster.local:11435"
+  KOKORO_URL: "http://kokoro.voice-ai.svc.cluster.local:8880"
+  
+  # Model Settings
+  OLLAMA_MODEL: "gemma3:4b"
+  EMBEDDING_MODEL: "all-MiniLM-L6-v2"
+  
+  # RAG Settings
+  RAG_ENABLED: "true"
+  RAG_DOCS_PATH: "/app/docs"
+  RAG_CHUNK_SIZE: "1000"
+  RAG_CHUNK_OVERLAP: "200"
+  RAG_MAX_CONTEXT: "4000"
+  RAG_SIMILARITY_THRESHOLD: "0.7"
+  RAG_TOP_K: "5"
+  
+  # VAD Settings
+  VAD_MODEL: "silero"
+  VAD_THRESHOLD: "0.5"
+  VAD_MIN_SPEECH_DURATION: "0.1"
+  VAD_MAX_SPEECH_DURATION: "30.0"
+  VAD_MIN_SILENCE_DURATION: "0.5"
+  VAD_SPEECH_PAD_MS: "400"
+  
+  # GPU Settings
+  EMBEDDING_DEVICE: "cuda"
+  FAISS_DEVICE: "gpu"
+  GPU_MEMORY_FRACTION: "0.1"
+  
+  # Performance Settings
+  MAX_CONCURRENT_USERS: "10"
+  REQUEST_TIMEOUT: "30"
+  RESPONSE_TIMEOUT: "60"
+  AUDIO_BUFFER_SIZE: "1024"
+---
+# Frontend Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: frontend-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: frontend
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  NEXT_PUBLIC_LIVEKIT_URL: "ws://localhost:7880"
+  NEXT_PUBLIC_LIVEKIT_API_KEY: "devkey"
+  NEXT_PUBLIC_APP_NAME: "Local Voice AI"
+  NEXT_PUBLIC_APP_VERSION: "2.0.0"
+  NEXT_PUBLIC_MAX_AUDIO_DURATION: "300"
+  NEXT_PUBLIC_SAMPLE_RATE: "16000"
+  NEXT_PUBLIC_CHANNELS: "1"
+  NEXT_PUBLIC_AUDIO_FORMAT: "wav"
+  NODE_ENV: "production"
+  PORT: "3000"
+  HOSTNAME: "0.0.0.0"
+---
+# GPU Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gpu-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: gpu-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  # GPU Memory Allocation (in GB)
+  OLLAMA_GPU_MEMORY: "12"
+  WHISPER_GPU_MEMORY: "4"
+  KOKORO_GPU_MEMORY: "3"
+  AGENT_GPU_MEMORY: "3"
+  
+  # GPU Settings
+  GPU_MEMORY_FRACTION: "0.8"
+  GPU_TIME_SLICING: "true"
+  MPS_ENABLED: "true"
+  CUDA_VISIBLE_DEVICES: "0"
+  
+  # Performance Tuning
+  GPU_PERFORMANCE_LEVEL: "3"
+  GPU_POWER_LIMIT: "450"
+  GPU_MEMORY_CLOCK: "21000"
+  GPU_GRAPHICS_CLOCK: "2520"
+---
+# Monitoring Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: monitoring-config
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: monitoring
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+    
+    rule_files:
+      - "alert_rules.yml"
+    
+    scrape_configs:
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+          - role: pod
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+            action: keep
+            regex: true
+          - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+            action: replace
+            target_label: __metrics_path__
+            regex: (.+)
+          - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+            action: replace
+            regex: ([^:]+)(?::\d+)?;(\d+)
+            replacement: $1:$2
+            target_label: __address__
+          - action: labelmap
+            regex: __meta_kubernetes_pod_label_(.+)
+          - source_labels: [__meta_kubernetes_namespace]
+            action: replace
+            target_label: kubernetes_namespace
+          - source_labels: [__meta_kubernetes_pod_name]
+            action: replace
+            target_label: kubernetes_pod_name
+      
+      - job_name: 'gpu-metrics'
+        static_configs:
+          - targets: ['dcgm-exporter.monitoring.svc.cluster.local:9400']
+        scrape_interval: 5s
+        metrics_path: /metrics
+  
+  alert_rules.yml: |
+    groups:
+      - name: voice-ai-alerts
+        rules:
+          - alert: PodCrashLooping
+            expr: rate(kube_pod_container_status_restarts_total[15m]) > 0
+            for: 5m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Pod {{ $labels.pod }} is crash looping"
+              description: "Pod {{ $labels.pod }} in namespace {{ $labels.namespace }} is crash looping"
+          
+          - alert: HighMemoryUsage
+            expr: container_memory_usage_bytes / container_spec_memory_limit_bytes > 0.9
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High memory usage in {{ $labels.pod }}"
+              description: "Memory usage is above 90% in pod {{ $labels.pod }}"
+          
+          - alert: GPUHighUtilization
+            expr: dcgm_gpu_utilization > 90
+            for: 10m
+            labels:
+              severity: warning
+            annotations:
+              summary: "GPU utilization is high"
+              description: "GPU {{ $labels.gpu }} utilization is {{ $value }}%"
+          
+          - alert: ServiceDown
+            expr: up == 0
+            for: 2m
+            labels:
+              severity: critical
+            annotations:
+              summary: "Service {{ $labels.job }} is down"
+              description: "Service {{ $labels.job }} has been down for more than 2 minutes"

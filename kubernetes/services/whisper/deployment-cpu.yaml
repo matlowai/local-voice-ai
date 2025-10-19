@@ -1,0 +1,528 @@
+---
+# CPU-Only Whisper Deployment (Fallback Option)
+# Used when GPU is not available or as backup
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whisper-cpu
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: stt-service
+    app.kubernetes.io/part-of: local-voice-ai
+    app.kubernetes.io/version: "v1.0.0"
+    deployment-type: "cpu-fallback"
+  annotations:
+    description: "CPU-only Whisper STT service for Local Voice AI (fallback)"
+    fallback-for: "whisper-gpu"
+spec:
+  replicas: 1
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: whisper
+      deployment-type: "cpu-fallback"
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: whisper
+        app.kubernetes.io/component: stt-service
+        app.kubernetes.io/part-of: local-voice-ai
+        deployment-type: "cpu-fallback"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "11435"
+        prometheus.io/path: "/metrics"
+    spec:
+      # Node selector for CPU-optimized nodes
+      nodeSelector:
+        cpu: "high"
+        memory: "high"
+      tolerations:
+      - key: "cpu-only"
+        operator: "Exists"
+        effect: "NoSchedule"
+      
+      # Service account
+      serviceAccountName: whisper-cpu
+      
+      containers:
+      - name: whisper
+        image: openai/whisper:latest
+        imagePullPolicy: IfNotPresent
+        
+        # CPU and memory resource allocation (higher than GPU version)
+        resources:
+          limits:
+            cpu: "6000m"
+            memory: "10Gi"
+          requests:
+            cpu: "3000m"
+            memory: "6Gi"
+        
+        # Environment variables
+        env:
+        - name: WHISPER_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_MODEL
+        - name: WHISPER_DEVICE
+          value: "cpu"  # Override GPU setting
+        - name: WHISPER_COMPUTE_TYPE
+          value: "int8"  # Use int8 for CPU efficiency
+        - name: WHISPER_LANGUAGE
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_LANGUAGE
+        - name: WHISPER_TASK
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_TASK
+        - name: WHISPER_CHUNK_LENGTH
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_CHUNK_LENGTH
+        - name: WHISPER_STRIDE_LENGTH
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_STRIDE_LENGTH
+        - name: WHISPER_BEAM_SIZE
+          value: "1"  # Reduced for CPU
+        - name: WHISPER_TEMPERATURE
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_TEMPERATURE
+        - name: WHISPER_BEST_OF
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_BEST_OF
+        - name: WHISPER_PATIENCE
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_PATIENCE
+        - name: WHISPER_LENGTH_PENALTY
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_LENGTH_PENALTY
+        - name: WHISPER_SUPPRESS_TOKENS
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_SUPPRESS_TOKENS
+        - name: WHISPER_INITIAL_PROMPT
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_INITIAL_PROMPT
+        - name: WHISPER_CONDITION_ON_PREVIOUS_TEXT
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_CONDITION_ON_PREVIOUS_TEXT
+        - name: WHISPER_FP16
+          value: "false"  # Use FP32 for CPU
+        - name: WHISPER_TEMPERATURE_INCREMENT_ON_FALLBACK
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_TEMPERATURE_INCREMENT_ON_FALLBACK
+        - name: OMP_NUM_THREADS
+          value: "8"  # Optimize for multi-core CPU
+        - name: MKL_NUM_THREADS
+          value: "8"
+        
+        # Command and args for CPU Whisper
+        command:
+        - python
+        - -m
+        - whisper_server
+        - --model
+        - $(WHISPER_MODEL)
+        - --device
+        - $(WHISPER_DEVICE)
+        - --compute_type
+        - $(WHISPER_COMPUTE_TYPE)
+        - --language
+        - $(WHISPER_LANGUAGE)
+        - --task
+        - $(WHISPER_TASK)
+        - --host
+        - 0.0.0.0
+        - --port
+        - "80"
+        - --chunk_length_s
+        - $(WHISPER_CHUNK_LENGTH)
+        - --stride_length_s
+        - $(WHISPER_STRIDE_LENGTH)
+        - --beam_size
+        - $(WHISPER_BEAM_SIZE)
+        - --temperature
+        - $(WHISPER_TEMPERATURE)
+        - --best_of
+        - $(WHISPER_BEST_OF)
+        - --patience
+        - $(WHISPER_PATIENCE)
+        - --length_penalty
+        - $(WHISPER_LENGTH_PENALTY)
+        - --suppress_tokens
+        - $(WHISPER_SUPPRESS_TOKENS)
+        - --initial_prompt
+        - $(WHISPER_INITIAL_PROMPT)
+        - --condition_on_previous_text
+        - $(WHISPER_CONDITION_ON_PREVIOUS_TEXT)
+        - --fp16
+        - $(WHISPER_FP16)
+        - --temperature_increment_on_fallback
+        - $(WHISPER_TEMPERATURE_INCREMENT_ON_FALLBACK)
+        
+        # Ports
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        
+        # Health checks (longer delays for CPU)
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 120
+          periodSeconds: 30
+          timeoutSeconds: 15
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 90
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 40
+        
+        # Volume mounts
+        volumeMounts:
+        - name: whisper-storage
+          mountPath: /data
+        - name: temp-storage
+          mountPath: /tmp
+        - name: whisper-config
+          mountPath: /etc/whisper-config
+          readOnly: true
+        - name: cpu-config
+          mountPath: /etc/cpu-config
+          readOnly: true
+        
+        # Security context
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      
+      # Volumes
+      volumes:
+      - name: whisper-storage
+        persistentVolumeClaim:
+          claimName: whisper-storage
+      - name: temp-storage
+        persistentVolumeClaim:
+          claimName: temp-storage
+      - name: whisper-config
+        configMap:
+          name: whisper-config
+      - name: cpu-config
+        configMap:
+          name: cpu-config
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 180
+
+---
+# Service Account for CPU Whisper
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: whisper-cpu
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: service-account
+    app.kubernetes.io/part-of: local-voice-ai
+automountServiceAccountToken: false
+
+---
+# ConfigMap for CPU-specific configurations
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cpu-config
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: cpu-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  config.yaml: |
+    # CPU-specific optimizations
+    
+    # Model settings
+    cpu_models:
+      - "tiny"
+      - "base"
+      - "small"
+    
+    # Performance settings
+    cpu_optimization:
+      num_threads: 8
+      max_concurrent_requests: 2
+      batch_size: 1
+      chunk_length: 20
+      stride_length: 5
+    
+    # Memory management
+    memory_management:
+      swap_usage: "enabled"
+      memory_limit: "8Gi"
+      gc_frequency: "high"
+    
+    # Thermal management
+    thermal_management:
+      max_cpu_temp: 85
+      cpu_throttle: true
+      cooling_policy: "performance"
+  
+  cpu-optimization.sh: |
+    #!/bin/bash
+    # CPU optimization script for Whisper
+    
+    echo "Optimizing CPU settings for Whisper..."
+    
+    # Set CPU governor to performance
+    for cpu in /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor; do
+      echo performance | sudo tee $cpu
+    done
+    
+    # Optimize process scheduling
+    echo 'kernel.sched_migration_cost_ns = 5000000' | sudo sysctl -p
+    
+    # Increase file limits
+    ulimit -n 65536
+    
+    # Optimize memory management
+    echo 'vm.swappiness = 10' | sudo sysctl -p
+    echo 'vm.dirty_ratio = 15' | sudo sysctl -p
+    echo 'vm.dirty_background_ratio = 5' | sudo sysctl -p
+    
+    echo "CPU optimization completed"
+    
+    # Monitor CPU usage
+    watch -n 1 'top -bn1 | grep "Cpu\|whisper"'
+  
+  model-loader-cpu.sh: |
+    #!/bin/bash
+    # Download Whisper models for CPU inference
+    
+    MODELS=("tiny" "base" "small")
+    
+    echo "Downloading Whisper models for CPU..."
+    
+    for model in "${MODELS[@]}"; do
+      echo "Downloading model: $model"
+      python -c "
+      import whisper
+      try:
+          model = whisper.load_model('$model', device='cpu')
+          print(f'Successfully loaded: $model')
+      except Exception as e:
+          print(f'Failed to load $model: {e}')
+      "
+    done
+    
+    echo "CPU Whisper model downloading completed"
+  
+  benchmark.sh: |
+    #!/bin/bash
+    # Benchmark CPU Whisper performance
+    
+    echo "Benchmarking Whisper CPU performance..."
+    
+    # Create test audio file (if not exists)
+    if [ ! -f "/data/test_audio.wav" ]; then
+      echo "Creating test audio file..."
+      # Generate a test audio file
+    fi
+    
+    # Benchmark different models
+    MODELS=("tiny" "base" "small")
+    
+    for model in "${MODELS[@]}"; do
+      echo "Benchmarking model: $model"
+      start_time=$(date +%s.%N)
+      
+      python -c "
+      import whisper
+      import time
+      model = whisper.load_model('$model', device='cpu')
+      result = model.transcribe('/data/test_audio.wav')
+      print(f'Transcription: {result[\"text\"][:100]}...')
+      "
+      
+      end_time=$(date +%s.%N)
+      duration=$(echo "$end_time - $start_time" | bc)
+      echo "Model $model took ${duration} seconds"
+    done
+    
+    echo "CPU Whisper benchmark completed"
+  
+  health-check-cpu.sh: |
+    #!/bin/bash
+    # Health check script for CPU Whisper
+    
+    # Check if Whisper API is responding
+    if curl -f http://localhost:80/health > /dev/null 2>&1; then
+      echo "Whisper API is responding"
+    else
+      echo "Whisper API is not responding"
+      exit 1
+    fi
+    
+    # Check CPU usage
+    CPU_USAGE=$(top -bn1 | grep "Cpu(s)" | awk '{print $2}' | sed 's/%us,//')
+    echo "CPU Usage: ${CPU_USAGE}%"
+    
+    # Check memory usage
+    MEMORY_USAGE=$(free | grep Mem | awk '{printf("%.1f", $3/$2 * 100.0)}')
+    echo "Memory Usage: ${MEMORY_USAGE}%"
+    
+    # Check load average
+    LOAD_AVG=$(uptime | awk -F'load average:' '{print $2}')
+    echo "Load Average: $LOAD_AVG"
+    
+    # Test transcription
+    echo "Testing transcription..."
+    curl -X POST http://localhost:80/transcribe \
+      -H "Content-Type: application/json" \
+      -d '{"audio_url": "test.wav"}' || echo "Transcription test failed"
+    
+    echo "CPU Whisper health check completed successfully"
+
+---
+# Horizontal Pod Autoscaler for CPU deployment
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: whisper-cpu-hpa
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: autoscaling
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: whisper-cpu
+  minReplicas: 1
+  maxReplicas: 3  # Can scale CPU instances
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 80
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 85
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 20
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+
+---
+# Pod Disruption Budget for CPU deployment
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: whisper-cpu-pdb
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: pdb
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: whisper
+      deployment-type: "cpu-fallback"
+
+---
+# Service that points to active deployment (GPU or CPU)
+apiVersion: v1
+kind: Service
+metadata:
+  name: whisper-active
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: local-voice-ai
+  annotations:
+    description: "Active Whisper service (switches between GPU and CPU)"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 11435
+    targetPort: 80
+    protocol: TCP
+  selector:
+    # This will be updated by the switch script
+    app.kubernetes.io/name: whisper
+    # deployment-type will be toggled between gpu-optimized and cpu-fallback

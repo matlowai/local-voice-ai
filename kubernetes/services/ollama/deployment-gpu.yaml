@@ -1,0 +1,411 @@
+---
+# GPU-Optimized Ollama Deployment
+# Designed for RTX 5090 with 32GB VRAM
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ollama
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: llm-service
+    app.kubernetes.io/part-of: local-voice-ai
+    app.kubernetes.io/version: "v1.0.0"
+    deployment-type: "gpu-optimized"
+  annotations:
+    description: "GPU-accelerated Ollama LLM service for Local Voice AI"
+    gpu.memory: "12Gi"
+    gpu.model: "nvidia-rtx-5090"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null  # Use recreate for GPU resources
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ollama
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ollama
+        app.kubernetes.io/component: llm-service
+        app.kubernetes.io/part-of: local-voice-ai
+        deployment-type: "gpu-optimized"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "11434"
+        prometheus.io/path: "/metrics"
+    spec:
+      # GPU-specific node selector and tolerations
+      nodeSelector:
+        gpu: "true"
+        accelerator: "nvidia-geforce-rtx-5090"
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      
+      # Service account for GPU access
+      serviceAccountName: ollama
+      
+      # Init container to verify GPU availability
+      initContainers:
+      - name: gpu-check
+        image: nvidia/cuda:12.8.0-devel-ubuntu22.04
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Checking GPU availability..."
+          nvidia-smi
+          if [ $? -eq 0 ]; then
+            echo "GPU is available"
+          else
+            echo "GPU is not available"
+            exit 1
+          fi
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        securityContext:
+          privileged: true
+      
+      containers:
+      - name: ollama
+        image: ollama/ollama:latest
+        imagePullPolicy: IfNotPresent
+        
+        # GPU and CPU resource allocation
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            nvidia.com/gpu-memory: "12Gi"
+            cpu: "8000m"
+            memory: "24Gi"
+          requests:
+            nvidia.com/gpu: 1
+            nvidia.com/gpu-memory: "12Gi"
+            cpu: "4000m"
+            memory: "16Gi"
+        
+        # Environment variables
+        env:
+        - name: OLLAMA_HOST
+          value: "0.0.0.0"
+        - name: OLLAMA_PORT
+          value: "11434"
+        - name: OLLAMA_ORIGINS
+          value: "*"
+        - name: OLLAMA_MODELS
+          valueFrom:
+            configMapKeyRef:
+              name: ollama-config
+              key: OLLAMA_MODELS
+        - name: OLLAMA_MAX_LOADED_MODELS
+          valueFrom:
+            configMapKeyRef:
+              name: ollama-config
+              key: OLLAMA_MAX_LOADED_MODELS
+        - name: OLLAMA_GPU_MEMORY_FRACTION
+          valueFrom:
+            configMapKeyRef:
+              name: ollama-config
+              key: OLLAMA_GPU_MEMORY_FRACTION
+        - name: OLLAMA_NUM_PARALLEL
+          valueFrom:
+            configMapKeyRef:
+              name: ollama-config
+              key: OLLAMA_NUM_PARALLEL
+        - name: OLLAMA_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: ollama-config
+              key: OLLAMA_TIMEOUT
+        - name: OLLAMA_LOAD_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: ollama-config
+              key: OLLAMA_LOAD_TIMEOUT
+        - name: CUDA_VISIBLE_DEVICES
+          valueFrom:
+            configMapKeyRef:
+              name: gpu-config
+              key: CUDA_VISIBLE_DEVICES
+        - name: GPU_MEMORY_FRACTION
+          valueFrom:
+            configMapKeyRef:
+              name: gpu-config
+              key: GPU_MEMORY_FRACTION
+        
+        # Ports
+        ports:
+        - name: http
+          containerPort: 11434
+          protocol: TCP
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        
+        # Volume mounts
+        volumeMounts:
+        - name: ollama-storage
+          mountPath: /root/.ollama
+        - name: temp-storage
+          mountPath: /tmp
+        - name: gpu-config
+          mountPath: /etc/gpu-config
+          readOnly: true
+        
+        # Security context
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      
+      # Volumes
+      volumes:
+      - name: ollama-storage
+        persistentVolumeClaim:
+          claimName: ollama-storage
+      - name: temp-storage
+        persistentVolumeClaim:
+          claimName: temp-storage
+      - name: gpu-config
+        configMap:
+          name: gpu-config
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 120
+
+---
+# Service Account for Ollama
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ollama
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: service-account
+    app.kubernetes.io/part-of: local-voice-ai
+automountServiceAccountToken: false
+
+---
+# Role for Ollama Service Account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: ollama-role
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: local-voice-ai
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+
+---
+# Role Binding for Ollama
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: ollama-rolebinding
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: local-voice-ai
+subjects:
+- kind: ServiceAccount
+  name: ollama
+  namespace: voice-ai
+roleRef:
+  kind: Role
+  name: ollama-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Horizontal Pod Autoscaler (for future scaling)
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ollama-hpa
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: autoscaling
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ollama
+  minReplicas: 1
+  maxReplicas: 2  # Limited by GPU availability
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: ollama-pdb
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: pdb
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  minAvailable: 0  # Allow disruption for single GPU instance
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ollama
+
+---
+# ConfigMap for GPU optimization scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ollama-gpu-scripts
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: scripts
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  gpu-optimization.sh: |
+    #!/bin/bash
+    # GPU optimization script for Ollama
+    
+    echo "Optimizing GPU settings for Ollama..."
+    
+    # Set GPU performance mode
+    nvidia-smi -pm 1
+    
+    # Set power limit (450W for RTX 5090)
+    nvidia-smi -pl 450
+    
+    # Set memory clock
+    nvidia-smi -ac 877,21000
+    
+    # Enable persistence mode
+    nvidia-smi -pm 1
+    
+    echo "GPU optimization completed"
+    
+    # Monitor GPU usage
+    watch -n 1 'nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits'
+  
+  model-loader.sh: |
+    #!/bin/bash
+    # Preload models for faster inference
+    
+    MODELS=("gemma3:4b" "gemma3:7b" "llama3:8b")
+    
+    echo "Preloading models..."
+    
+    for model in "${MODELS[@]}"; do
+      echo "Loading model: $model"
+      ollama pull "$model"
+      if [ $? -eq 0 ]; then
+        echo "Successfully loaded: $model"
+      else
+        echo "Failed to load: $model"
+      fi
+    done
+    
+    echo "Model preloading completed"
+    ollama list
+  
+  health-check.sh: |
+    #!/bin/bash
+    # Health check script for Ollama
+    
+    # Check if Ollama is responding
+    if curl -f http://localhost:11434/api/tags > /dev/null 2>&1; then
+      echo "Ollama API is responding"
+    else
+      echo "Ollama API is not responding"
+      exit 1
+    fi
+    
+    # Check GPU status
+    if nvidia-smi > /dev/null 2>&1; then
+      echo "GPU is available"
+      nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits
+    else
+      echo "GPU is not available"
+      exit 1
+    fi
+    
+    # Check loaded models
+    echo "Loaded models:"
+    ollama list
+    
+    echo "Health check completed successfully"

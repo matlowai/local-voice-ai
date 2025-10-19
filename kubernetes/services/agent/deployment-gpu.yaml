@@ -1,0 +1,673 @@
+---
+# GPU-Optimized Agent Deployment
+# Python agent with LiveKit SDK and GPU-accelerated RAG
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: agent
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: agent-service
+    app.kubernetes.io/part-of: local-voice-ai
+    app.kubernetes.io/version: "v1.0.0"
+    deployment-type: "gpu-optimized"
+  annotations:
+    description: "GPU-accelerated Agent service with RAG for Local Voice AI"
+    gpu.memory: "3Gi"
+    gpu.model: "nvidia-rtx-5090"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null  # Use recreate for GPU resources
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: agent
+        app.kubernetes.io/component: agent-service
+        app.kubernetes.io/part-of: local-voice-ai
+        deployment-type: "gpu-optimized"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8080"
+        prometheus.io/path: "/metrics"
+    spec:
+      # GPU-specific node selector and tolerations
+      nodeSelector:
+        gpu: "true"
+        accelerator: "nvidia-geforce-rtx-5090"
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      
+      # Service account for GPU access
+      serviceAccountName: agent
+      
+      # Init containers
+      initContainers:
+      - name: gpu-check
+        image: nvidia/cuda:12.8.0-devel-ubuntu22.04
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Checking GPU availability for Agent..."
+          nvidia-smi
+          if [ $? -eq 0 ]; then
+            echo "GPU is available for Agent"
+          else
+            echo "GPU is not available"
+            exit 1
+          fi
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        securityContext:
+          privileged: true
+      
+      - name: docs-init
+        image: busybox:1.35
+        command:
+        - /bin/sh
+        - -c
+        - |
+          echo "Initializing RAG documents..."
+          # Create docs directory if it doesn't exist
+          mkdir -p /app/docs
+          # Copy any existing documents from persistent storage
+          if [ -d "/data/docs" ]; then
+            cp -r /data/docs/* /app/docs/ 2>/dev/null || true
+          fi
+          # Create sample documents if none exist
+          if [ ! -f "/app/docs/welcome.txt" ]; then
+            echo "Welcome to Local Voice AI!" > /app/docs/welcome.txt
+            echo "This is a sample document for RAG testing." >> /app/docs/welcome.txt
+          fi
+          echo "RAG documents initialized"
+        volumeMounts:
+        - name: agent-storage
+          mountPath: /data
+        - name: agent-config
+          mountPath: /app/docs
+      
+      containers:
+      - name: agent
+        image: local-voice-ai/agent:latest-gpu
+        imagePullPolicy: IfNotPresent
+        
+        # GPU and CPU resource allocation
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            nvidia.com/gpu-memory: "3Gi"
+            cpu: "4000m"
+            memory: "12Gi"
+          requests:
+            nvidia.com/gpu: 1
+            nvidia.com/gpu-memory: "3Gi"
+            cpu: "2000m"
+            memory: "8Gi"
+        
+        # Environment variables
+        env:
+        # LiveKit Configuration
+        - name: LIVEKIT_HOST
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: LIVEKIT_HOST
+        - name: LIVEKIT_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: livekit-secrets
+              key: api-key
+        - name: LIVEKIT_API_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: livekit-secrets
+              key: api-secret
+        - name: LIVEKIT_ROOM_NAME
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: LIVEKIT_ROOM_NAME
+        
+        # AI Service URLs
+        - name: OLLAMA_URL
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: OLLAMA_URL
+        - name: WHISPER_URL
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: WHISPER_URL
+        - name: KOKORO_URL
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: KOKORO_URL
+        
+        # Model Settings
+        - name: OLLAMA_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: OLLAMA_MODEL
+        - name: EMBEDDING_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: EMBEDDING_MODEL
+        
+        # RAG Settings
+        - name: RAG_ENABLED
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: RAG_ENABLED
+        - name: RAG_DOCS_PATH
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: RAG_DOCS_PATH
+        - name: RAG_CHUNK_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: RAG_CHUNK_SIZE
+        - name: RAG_CHUNK_OVERLAP
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: RAG_CHUNK_OVERLAP
+        - name: RAG_MAX_CONTEXT
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: RAG_MAX_CONTEXT
+        - name: RAG_SIMILARITY_THRESHOLD
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: RAG_SIMILARITY_THRESHOLD
+        - name: RAG_TOP_K
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: RAG_TOP_K
+        
+        # VAD Settings
+        - name: VAD_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: VAD_MODEL
+        - name: VAD_THRESHOLD
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: VAD_THRESHOLD
+        - name: VAD_MIN_SPEECH_DURATION
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: VAD_MIN_SPEECH_DURATION
+        - name: VAD_MAX_SPEECH_DURATION
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: VAD_MAX_SPEECH_DURATION
+        - name: VAD_MIN_SILENCE_DURATION
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: VAD_MIN_SILENCE_DURATION
+        - name: VAD_SPEECH_PAD_MS
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: VAD_SPEECH_PAD_MS
+        
+        # GPU Settings
+        - name: EMBEDDING_DEVICE
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: EMBEDDING_DEVICE
+        - name: FAISS_DEVICE
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: FAISS_DEVICE
+        - name: GPU_MEMORY_FRACTION
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: GPU_MEMORY_FRACTION
+        - name: CUDA_VISIBLE_DEVICES
+          valueFrom:
+            configMapKeyRef:
+              name: gpu-config
+              key: CUDA_VISIBLE_DEVICES
+        - name: TORCH_CUDA_ARCH_LIST
+          value: "8.9+PTX"  # Optimized for RTX 5090
+        
+        # Performance Settings
+        - name: MAX_CONCURRENT_USERS
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: MAX_CONCURRENT_USERS
+        - name: REQUEST_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: REQUEST_TIMEOUT
+        - name: RESPONSE_TIMEOUT
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: RESPONSE_TIMEOUT
+        - name: AUDIO_BUFFER_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: agent-config
+              key: AUDIO_BUFFER_SIZE
+        
+        # Global Settings
+        - name: LOG_LEVEL
+          valueFrom:
+            configMapKeyRef:
+              name: voice-ai-config
+              key: LOG_LEVEL
+        - name: ENVIRONMENT
+          valueFrom:
+            configMapKeyRef:
+              name: voice-ai-config
+              key: ENVIRONMENT
+        
+        # Command
+        command:
+        - python
+        - myagent.py
+        - start
+        
+        # Ports
+        ports:
+        - name: http
+          containerPort: 8080
+          protocol: TCP
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 90
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 15
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 15
+          timeoutSeconds: 10
+          failureThreshold: 40
+        
+        # Volume mounts
+        volumeMounts:
+        - name: agent-storage
+          mountPath: /app/data
+        - name: agent-config
+          mountPath: /app/docs
+        - name: temp-storage
+          mountPath: /tmp
+        - name: agent-env
+          mountPath: /app/config
+          readOnly: true
+        - name: voice-ai-config
+          mountPath: /app/global-config
+          readOnly: true
+        
+        # Security context
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      
+      # Volumes
+      volumes:
+      - name: agent-storage
+        persistentVolumeClaim:
+          claimName: agent-storage
+      - name: temp-storage
+        persistentVolumeClaim:
+          claimName: temp-storage
+      - name: agent-config
+        configMap:
+          name: agent-config
+      - name: agent-env
+        configMap:
+          name: voice-ai-config
+      - name: voice-ai-config
+        configMap:
+          name: voice-ai-config
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 120
+
+---
+# Service Account for Agent
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: agent
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: service-account
+    app.kubernetes.io/part-of: local-voice-ai
+automountServiceAccountToken: false
+
+---
+# Role for Agent Service Account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: agent-role
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: local-voice-ai
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps", "secrets"]
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["apps"]
+  resources: ["deployments"]
+  verbs: ["get", "list", "watch"]
+
+---
+# Role Binding for Agent
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: agent-rolebinding
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: local-voice-ai
+subjects:
+- kind: ServiceAccount
+  name: agent
+  namespace: voice-ai
+roleRef:
+  kind: Role
+  name: agent-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: agent-hpa
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: autoscaling
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: agent
+  minReplicas: 1
+  maxReplicas: 2  # Limited by GPU availability
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: agent-pdb
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: pdb
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  minAvailable: 0  # Allow disruption for single GPU instance
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: agent
+
+---
+# ConfigMap for GPU optimization scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: agent-gpu-scripts
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: agent
+    app.kubernetes.io/component: scripts
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  gpu-optimization.sh: |
+    #!/bin/bash
+    # GPU optimization script for Agent
+    
+    echo "Optimizing GPU settings for Agent..."
+    
+    # Check GPU status
+    nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits
+    
+    # Set GPU memory allocation for Agent
+    export CUDA_VISIBLE_DEVICES=0
+    
+    # Optimize CUDA settings for embeddings
+    export TORCH_CUDA_ARCH_LIST="8.9+PTX"
+    export CUDA_MODULE_LOADING=LAZY
+    
+    # Optimize FAISS GPU settings
+    export FAISS_NO_AVX2=1
+    export FAISS_ENABLE_GPU=1
+    
+    echo "GPU optimization completed for Agent"
+  
+  rag-indexer.sh: |
+    #!/bin/bash
+    # RAG indexing script for GPU acceleration
+    
+    echo "Indexing RAG documents with GPU acceleration..."
+    
+    python -c "
+    import os
+    import torch
+    from sentence_transformers import SentenceTransformer
+    import faiss
+    import numpy as np
+    from pathlib import Path
+    
+    # Check GPU availability
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f'Using device: {device}')
+    
+    # Load embedding model
+    model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+    
+    # Load documents
+    docs_path = Path('/app/docs')
+    documents = []
+    
+    for txt_file in docs_path.glob('*.txt'):
+        with open(txt_file, 'r', encoding='utf-8') as f:
+            content = f.read().strip()
+            if content:
+                documents.append(content)
+    
+    print(f'Found {len(documents)} documents')
+    
+    if documents:
+        # Create embeddings
+        print('Creating embeddings...')
+        embeddings = model.encode(documents, device=device, show_progress_bar=True)
+        
+        # Create FAISS index
+        dimension = embeddings.shape[1]
+        if device == 'cuda':
+            index = faiss.IndexFlatIP(dimension)
+            gpu_index = faiss.index_cpu_to_gpu(faiss.StandardGpuResources(), 0, index)
+            gpu_index.add(embeddings.astype('float32'))
+            print(f'Created GPU index with {len(embeddings)} embeddings')
+        else:
+            index = faiss.IndexFlatIP(dimension)
+            index.add(embeddings.astype('float32'))
+            print(f'Created CPU index with {len(embeddings)} embeddings')
+    else:
+        print('No documents found to index')
+    "
+    
+    echo "RAG indexing completed"
+  
+  benchmark.sh: |
+    #!/bin/bash
+    # Benchmark GPU RAG performance
+    
+    echo "Benchmarking Agent GPU performance..."
+    
+    python -c "
+    import torch
+    from sentence_transformers import SentenceTransformer
+    import time
+    import numpy as np
+    
+    # Check GPU availability
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f'Using device: {device}')
+    
+    # Load model
+    model = SentenceTransformer('all-MiniLM-L6-v2', device=device)
+    
+    # Test embedding performance
+    test_texts = [
+        'This is a test sentence for benchmarking.',
+        'Another test sentence to measure performance.',
+        'A third test sentence for evaluation.',
+        'Yet another test sentence for the benchmark.',
+        'Final test sentence in the benchmark set.'
+    ] * 10  # 50 sentences
+    
+    print(f'Benchmarking with {len(test_texts)} sentences...')
+    
+    # GPU benchmark
+    start_time = time.time()
+    embeddings = model.encode(test_texts, device=device, batch_size=32)
+    end_time = time.time()
+    
+    duration = end_time - start_time
+    sentences_per_second = len(test_texts) / duration
+    
+    print(f'Encoding {len(test_texts)} sentences took {duration:.2f} seconds')
+    print(f'Performance: {sentences_per_second:.2f} sentences/second')
+    print(f'Embedding shape: {embeddings.shape}')
+    
+    if device == 'cuda':
+        print(f'GPU Memory: {torch.cuda.memory_allocated() / 1024**3:.2f}GB allocated')
+        print(f'GPU Memory: {torch.cuda.memory_reserved() / 1024**3:.2f}GB reserved')
+    "
+    
+    echo "Agent GPU benchmark completed"
+  
+  health-check.sh: |
+    #!/bin/bash
+    # Health check script for Agent GPU
+    
+    # Check if Agent API is responding
+    if curl -f http://localhost:8080/health > /dev/null 2>&1; then
+      echo "Agent API is responding"
+    else
+      echo "Agent API is not responding"
+      exit 1
+    fi
+    
+    # Check GPU status
+    if nvidia-smi > /dev/null 2>&1; then
+      echo "GPU is available"
+      nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits
+    else
+      echo "GPU is not available"
+      exit 1
+    fi
+    
+    # Check RAG index
+    if [ -f "/app/data/faiss.index" ]; then
+      echo "RAG index is available"
+    else
+      echo "RAG index not found"
+    fi
+    
+    # Check document count
+    DOC_COUNT=$(find /app/docs -name "*.txt" | wc -l)
+    echo "RAG documents: $DOC_COUNT"
+    
+    echo "Agent GPU health check completed successfully"

@@ -61,52 +61,70 @@ wait_for_service() {
 
 # Function to fix file permissions
 fix_permissions() {
-    print_status "header" "🔧 Fixing file permissions..."
+    print_status "header" "🔧 Fixing file permissions and extended attributes..."
     
-    # Fix .env file permissions and attributes
-    if [ -f ".env" ]; then
-        # Remove any problematic extended attributes
-        chattr -e .env 2>/dev/null || true
-        # Set proper permissions
-        chmod 644 .env
-        print_status "success" "Fixed .env file permissions and attributes"
-    else
-        print_status "warning" ".env file not found"
-    fi
+    # Fix key configuration files
+    local config_files=(".env" "docker-compose.yml" "agent/.env" "Dockerfile" "agent/Dockerfile" "whisper/Dockerfile")
     
-    # Fix agent/.env file permissions if it exists
-    if [ -f "agent/.env" ]; then
-        chattr -e agent/.env 2>/dev/null || true
-        chmod 644 agent/.env
-        print_status "success" "Fixed agent/.env file permissions"
-    fi
+    for file in "${config_files[@]}"; do
+        if [ -f "$file" ]; then
+            # Remove any problematic extended attributes
+            chattr -e "$file" 2>/dev/null || true
+            # Set proper permissions
+            chmod 644 "$file"
+            print_status "success" "Fixed $file permissions and attributes"
+        else
+            print_status "info" "$file not found, skipping"
+        fi
+    done
     
     # Make scripts executable
-    chmod +x test.sh
-    chmod +x verify-setup.sh
-    chmod +x setup-and-verify.sh
-    print_status "success" "Made scripts executable"
+    local script_files=("test.sh" "verify-setup.sh" "setup-and-verify.sh" "scripts/validate-docs.py")
     
-    # Fix documentation script permissions
-    if [ -f "scripts/validate-docs.py" ]; then
-        chmod +x scripts/validate-docs.py
-        print_status "success" "Fixed documentation script permissions"
-    fi
+    for script in "${script_files[@]}"; do
+        if [ -f "$script" ]; then
+            chattr -e "$script" 2>/dev/null || true
+            chmod +x "$script"
+            print_status "success" "Made $script executable"
+        fi
+    done
+    
+    print_status "success" "All file permissions and attributes fixed"
 }
 
 # Function to start containers
 start_containers() {
     print_status "header" "🚀 Starting containers..."
     
-    # Check if containers are already running
-    if docker-compose ps --format "table {{.Name}}\t{{.Status}}" | grep -q "Up"; then
-        print_status "info" "Containers are already running. Stopping and restarting..."
-        docker-compose down -v --remove-orphans
-    fi
+    # Try to stop any existing containers first
+    print_status "info" "Stopping any existing containers..."
+    docker-compose down -v --remove-orphans 2>/dev/null || true
     
-    # Start containers in detached mode
+    # Try to start with docker-compose first
     print_status "info" "Building and starting all services..."
-    docker-compose up --build -d
+    if docker-compose up --build -d 2>/dev/null; then
+        print_status "success" "Containers started successfully with docker-compose"
+    else
+        print_status "warning" "Docker-compose failed, trying alternative approach..."
+        
+        # Fallback: Use docker commands directly with environment variables
+        print_status "info" "Starting containers with direct Docker commands..."
+        
+        # Start network first
+        docker network create agent_network 2>/dev/null || true
+        
+        # Start services in order with proper environment
+        export LIVEKIT_URL=ws://livekit:7880
+        export LIVEKIT_API_KEY=devkey
+        export LIVEKIT_API_SECRET=secret
+        export OPENAI_API_KEY=no-key-needed
+        export GROQ_API_KEY=no-key-needed
+        export NEXT_PUBLIC_LIVEKIT_URL=ws://localhost:7880
+        export NEXT_PUBLIC_LIVEKIT_API_KEY=devkey
+        
+        # Build and start each service
+        docker-compose build && docker-compose up -d
+    fi
     
     # Wait a bit for containers to initialize
     sleep 10
@@ -116,7 +134,7 @@ start_containers() {
     local all_running=true
     
     for container in "${containers[@]}"; do
-        if docker-compose ps --format "table {{.Name}}\t{{.Status}}" | grep -q "$container.*Up"; then
+        if docker ps --format "table {{.Names}}\t{{.Status}}" | grep -q "${PWD##*/}_$container.*Up"; then
             print_status "success" "$container container is running"
         else
             print_status "error" "$container container failed to start"
@@ -126,7 +144,7 @@ start_containers() {
     
     if [ "$all_running" = false ]; then
         print_status "error" "Some containers failed to start. Showing logs..."
-        docker-compose logs --tail=20
+        docker-compose logs --tail=20 2>/dev/null || docker logs $(docker ps -a --format "table {{.Names}}" | grep "${PWD##*/}" | head -5)
         return 1
     fi
     

@@ -1,0 +1,440 @@
+---
+# Ingress Routes for Local Voice AI
+# External access configuration for all services
+
+---
+# Main Ingress Route for Frontend
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: voice-ai-ingress
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: voice-ai-ingress
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: local-voice-ai
+  annotations:
+    description: "Main ingress route for Local Voice AI frontend"
+    # Traefik annotations
+    traefik.ingress.kubernetes.io/router.middlewares: "voice-ai-headers@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.tls: "false"
+    # CORS headers
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
+    # Rate limiting
+    nginx.ingress.kubernetes.io/rate-limit: "100"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  ingressClassName: "traefik"
+  rules:
+  - host: "localhost"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 3000
+  - host: "voice-ai.local"
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 3000
+
+---
+# LiveKit Ingress Route (WebRTC signaling)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: livekit-ingress
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: livekit-ingress
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: local-voice-ai
+  annotations:
+    description: "Ingress route for LiveKit WebRTC signaling"
+    # Traefik annotations for WebRTC
+    traefik.ingress.kubernetes.io/router.middlewares: "livekit-websocket@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.tls: "false"
+    # WebSocket support
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+    # CORS for WebRTC
+    nginx.ingress.kubernetes.io/enable-cors: "true"
+    nginx.ingress.kubernetes.io/cors-allow-origin: "*"
+    nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, OPTIONS"
+    nginx.ingress.kubernetes.io/cors-allow-headers: "*"
+spec:
+  ingressClassName: "traefik"
+  rules:
+  - host: "localhost"
+    http:
+      paths:
+      - path: /livekit
+        pathType: Prefix
+        backend:
+          service:
+            name: livekit
+            port:
+              number: 7880
+  - host: "voice-ai.local"
+    http:
+      paths:
+      - path: /livekit
+        pathType: Prefix
+        backend:
+          service:
+            name: livekit
+            port:
+              number: 7880
+
+---
+# API Ingress Route (for direct API access)
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: api-ingress
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: api-ingress
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: local-voice-ai
+  annotations:
+    description: "Ingress route for API services"
+    # Traefik annotations
+    traefik.ingress.kubernetes.io/router.middlewares: "api-headers@kubernetescrd"
+    traefik.ingress.kubernetes.io/router.tls: "false"
+    # API-specific headers
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      add_header "Access-Control-Allow-Origin" "*";
+      add_header "Access-Control-Allow-Methods" "GET, POST, PUT, DELETE, OPTIONS";
+      add_header "Access-Control-Allow-Headers" "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization";
+      add_header "Access-Control-Expose-Headers" "Content-Length,Content-Range";
+    # Rate limiting for APIs
+    nginx.ingress.kubernetes.io/rate-limit: "200"
+    nginx.ingress.kubernetes.io/rate-limit-window: "1m"
+spec:
+  ingressClassName: "traefik"
+  rules:
+  - host: "localhost"
+    http:
+      paths:
+      # Ollama API
+      - path: /api/ollama
+        pathType: Prefix
+        backend:
+          service:
+            name: ollama
+            port:
+              number: 11434
+      # Whisper API
+      - path: /api/whisper
+        pathType: Prefix
+        backend:
+          service:
+            name: whisper
+            port:
+              number: 11435
+      # Kokoro API
+      - path: /api/kokoro
+        pathType: Prefix
+        backend:
+          service:
+            name: kokoro
+            port:
+              number: 8880
+      # Agent API
+      - path: /api/agent
+        pathType: Prefix
+        backend:
+          service:
+            name: agent
+            port:
+              number: 8080
+  - host: "api.voice-ai.local"
+    http:
+      paths:
+      # Ollama API
+      - path: /ollama
+        pathType: Prefix
+        backend:
+          service:
+            name: ollama
+            port:
+              number: 11434
+      # Whisper API
+      - path: /whisper
+        pathType: Prefix
+        backend:
+          service:
+            name: whisper
+            port:
+              number: 11435
+      # Kokoro API
+      - path: /kokoro
+        pathType: Prefix
+        backend:
+          service:
+            name: kokoro
+            port:
+              number: 8880
+      # Agent API
+      - path: /agent
+        pathType: Prefix
+        backend:
+          service:
+            name: agent
+            port:
+              number: 8080
+
+---
+# Monitoring Ingress Route
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: monitoring-ingress
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: monitoring-ingress
+    app.kubernetes.io/component: ingress
+    app.kubernetes.io/part-of: local-voice-ai
+  annotations:
+    description: "Ingress route for monitoring services"
+    # Basic auth for monitoring
+    nginx.ingress.kubernetes.io/auth-type: "basic"
+    nginx.ingress.kubernetes.io/auth-secret: "monitoring-auth"
+    nginx.ingress.kubernetes.io/auth-realm: "Monitoring Authentication"
+spec:
+  ingressClassName: "traefik"
+  rules:
+  - host: "localhost"
+    http:
+      paths:
+      # Grafana
+      - path: /grafana
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana
+            port:
+              number: 3000
+      # Prometheus
+      - path: /prometheus
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus
+            port:
+              number: 9090
+  - host: "monitoring.voice-ai.local"
+    http:
+      paths:
+      # Grafana
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana
+            port:
+              number: 3000
+
+---
+# Middleware for Headers
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: voice-ai-headers
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: voice-ai-headers
+    app.kubernetes.io/component: middleware
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Proto: "https"
+      X-Forwarded-Host: "localhost"
+    customResponseHeaders:
+      X-Frame-Options: "DENY"
+      X-Content-Type-Options: "nosniff"
+      X-XSS-Protection: "1; mode=block"
+      Referrer-Policy: "strict-origin-when-cross-origin"
+      Content-Security-Policy: "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' ws: wss:;"
+
+---
+# Middleware for WebSocket Support
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: livekit-websocket
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: livekit-websocket
+    app.kubernetes.io/component: middleware
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  headers:
+    customRequestHeaders:
+      Upgrade: "websocket"
+      Connection: "upgrade"
+    customResponseHeaders:
+      Sec-WebSocket-Accept: ""
+
+---
+# Middleware for API Headers
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: api-headers
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: api-headers
+    app.kubernetes.io/component: middleware
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Proto: "https"
+      X-Forwarded-Host: "localhost"
+      Content-Type: "application/json"
+    customResponseHeaders:
+      Access-Control-Allow-Origin: "*"
+      Access-Control-Allow-Methods: "GET, POST, PUT, DELETE, OPTIONS"
+      Access-Control-Allow-Headers: "DNT,User-Agent,X-Requested-With,If-Modified-Since,Cache-Control,Content-Type,Range,Authorization"
+      Access-Control-Expose-Headers: "Content-Length,Content-Range"
+
+---
+# TLS Certificate (for future HTTPS support)
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: voice-ai-tls
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: voice-ai-tls
+    app.kubernetes.io/component: certificate
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  secretName: voice-ai-tls-secret
+  issuerRef:
+    name: letsencrypt-prod
+    kind: ClusterIssuer
+  dnsNames:
+  - "voice-ai.local"
+  - "api.voice-ai.local"
+  - "monitoring.voice-ai.local"
+
+---
+# IngressClass for Traefik
+apiVersion: networking.k8s.io/v1
+kind: IngressClass
+metadata:
+  name: traefik
+  labels:
+    app.kubernetes.io/name: traefik-ingress-class
+    app.kubernetes.io/component: ingress-class
+    app.kubernetes.io/part-of: local-voice-ai
+  annotations:
+    ingressclass.kubernetes.io/is-default-class: "true"
+spec:
+  controller: traefik.io/ingress-controller
+  parameters:
+    apiVersion: v1
+    kind: ConfigMap
+    name: traefik-config
+    namespace: traefik
+
+---
+# ConfigMap for Traefik Configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traefik-config
+  namespace: traefik
+  labels:
+    app.kubernetes.io/name: traefik-config
+    app.kubernetes.io/component: config
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  traefik.yml: |
+    # Traefik static configuration
+    global:
+      checkNewVersion: false
+      sendAnonymousUsage: false
+    
+    entryPoints:
+      web:
+        address: ":80"
+        http:
+          redirections:
+            entryPoint:
+              to: websecure
+              scheme: https
+              permanent: false
+      websecure:
+        address: ":443"
+        http:
+          tls:
+            options: "default"
+          middlewares:
+            - "security-headers@file"
+    
+    providers:
+      kubernetesIngress:
+        namespace: voice-ai
+        labelSelector: "app.kubernetes.io/part-of=local-voice-ai"
+        ingressClass: traefik
+      kubernetesCRD:
+        namespace: voice-ai
+        labelSelector: "app.kubernetes.io/part-of=local-voice-ai"
+    
+    api:
+      dashboard: true
+      insecure: true
+    
+    log:
+      level: "INFO"
+      format: "json"
+    
+    metrics:
+      prometheus:
+        addEntryPointsLabels: true
+        addServicesLabels: true
+        manualRouting: true
+    
+    ping:
+      entryPoint: "web"
+    
+    experimental:
+      plugins:
+        security-headers:
+          moduleName: "github.com/traefik/security-headers"
+          version: "v1.0.0"
+
+---
+# Secret for Monitoring Authentication
+apiVersion: v1
+kind: Secret
+metadata:
+  name: monitoring-auth
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: monitoring-auth
+    app.kubernetes.io/component: secret
+    app.kubernetes.io/part-of: local-voice-ai
+type: Opaque
+data:
+  # admin:admin123 (base64 encoded)
+  auth: YWRtaW46JGFwcjF5TW1jVzZCMTIzCg==

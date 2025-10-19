@@ -1,0 +1,76 @@
+---
+# Ollama Service - Internal Communication
+# Provides stable network endpoint for Ollama LLM service
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: local-voice-ai
+    service-type: "internal"
+  annotations:
+    description: "Internal service for Ollama LLM API"
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "11434"
+    prometheus.io/path: "/metrics"
+spec:
+  type: ClusterIP
+  ports:
+  - name: http
+    port: 11434
+    targetPort: 11434
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: ollama
+    # This selector will match both GPU and CPU deployments
+    # The active deployment will be determined by labels
+---
+# Ollama Headless Service (for direct pod access)
+apiVersion: v1
+kind: Service
+metadata:
+  name: ollama-headless
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: service
+    app.kubernetes.io/part-of: local-voice-ai
+    service-type: "headless"
+  annotations:
+    description: "Headless service for direct Ollama pod access"
+spec:
+  type: ClusterIP
+  clusterIP: None
+  ports:
+  - name: http
+    port: 11434
+    targetPort: 11434
+    protocol: TCP
+  selector:
+    app.kubernetes.io/name: ollama
+---
+# Ollama Service Monitor (for Prometheus)
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: ollama-metrics
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: ollama
+    app.kubernetes.io/component: monitoring
+    app.kubernetes.io/part-of: local-voice-ai
+  annotations:
+    description: "Service monitor for Ollama metrics"
+spec:
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ollama
+  endpoints:
+  - port: http
+    path: /metrics
+    interval: 30s
+    scrapeTimeout: 10s

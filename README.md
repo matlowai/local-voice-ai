@@ -90,6 +90,53 @@ For complete testing of your Local Voice AI setup, including documentation valid
 python3 scripts/validate-docs.py
 ```
 
+## ☸️ Kubernetes Deployment
+
+For production or GPU-accelerated deployments, you can use Kubernetes:
+
+### Quick Start with Kubernetes
+
+```bash
+# GPU-optimized deployment (recommended)
+bash kubernetes/scripts/deploy-gpu.sh
+
+# If you encounter permission issues:
+chmod +x kubernetes/scripts/*.sh kubernetes/install/*.sh
+./kubernetes/scripts/deploy-gpu.sh
+
+# Alternative simple deployment (no permissions needed)
+bash kubernetes/scripts/deploy-gpu-simple.sh
+```
+
+### Permission Troubleshooting
+
+If you get "Permission denied" errors:
+
+```bash
+# Fix all script permissions
+chmod +x kubernetes/scripts/*.sh kubernetes/install/*.sh
+
+# Or use bash interpreter directly
+bash kubernetes/scripts/deploy-gpu.sh
+
+# Or use the simple deployment script
+bash kubernetes/scripts/deploy-gpu-simple.sh
+```
+
+### Features
+
+- 🚀 **GPU Acceleration**: NVIDIA RTX 5090 optimized
+- 🔄 **Auto-fallback**: Switch to CPU if GPU fails
+- 📊 **Monitoring**: Prometheus + Grafana included
+- 🛡️ **Security**: Zero-trust networking
+- 📈 **Scalability**: Horizontal pod autoscaling
+
+### Documentation
+
+- 📖 [Kubernetes Deployment Guide](./KUBERNETES_DEPLOYMENT_GUIDE.md)
+- 🏗️ [Architecture](./docs/kubernetes-architecture.md)
+- 🔧 [Development Workflow](./docs/kubernetes-development-workflow.md)
+
 ## 🧰 Project Structure
 
 ```
@@ -99,6 +146,13 @@ python3 scripts/validate-docs.py
 ├── whisper/                   # Whisper via vox-box
 ├── livekit/                   # Signaling server
 ├── voice-assistant-frontend/ # Next.js UI client
+├── kubernetes/               # Kubernetes deployment files
+│   ├── scripts/              # Deployment and management scripts
+│   ├── install/              # Installation scripts
+│   ├── base/                 # Base Kubernetes resources
+│   ├── services/             # Service deployments
+│   └── ingress/              # Ingress configuration
+├── docs/                     # Documentation
 └── docker-compose.yml         # Brings it all together
 ```
 

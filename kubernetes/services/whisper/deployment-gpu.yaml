@@ -1,0 +1,538 @@
+---
+# GPU-Optimized Whisper Deployment
+# CUDA-accelerated speech-to-text service
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: whisper
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: stt-service
+    app.kubernetes.io/part-of: local-voice-ai
+    app.kubernetes.io/version: "v1.0.0"
+    deployment-type: "gpu-optimized"
+  annotations:
+    description: "GPU-accelerated Whisper STT service for Local Voice AI"
+    gpu.memory: "4Gi"
+    gpu.model: "nvidia-rtx-5090"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+    rollingUpdate: null  # Use recreate for GPU resources
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: whisper
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: whisper
+        app.kubernetes.io/component: stt-service
+        app.kubernetes.io/part-of: local-voice-ai
+        deployment-type: "gpu-optimized"
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "11435"
+        prometheus.io/path: "/metrics"
+    spec:
+      # GPU-specific node selector and tolerations
+      nodeSelector:
+        gpu: "true"
+        accelerator: "nvidia-geforce-rtx-5090"
+      tolerations:
+      - key: "nvidia.com/gpu"
+        operator: "Exists"
+        effect: "NoSchedule"
+      
+      # Service account for GPU access
+      serviceAccountName: whisper
+      
+      # Init container to verify GPU availability
+      initContainers:
+      - name: gpu-check
+        image: nvidia/cuda:12.8.0-devel-ubuntu22.04
+        command:
+        - /bin/bash
+        - -c
+        - |
+          echo "Checking GPU availability for Whisper..."
+          nvidia-smi
+          if [ $? -eq 0 ]; then
+            echo "GPU is available for Whisper"
+          else
+            echo "GPU is not available"
+            exit 1
+          fi
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+        securityContext:
+          privileged: true
+      
+      containers:
+      - name: whisper
+        image: openai/whisper:latest-gpu
+        imagePullPolicy: IfNotPresent
+        
+        # GPU and CPU resource allocation
+        resources:
+          limits:
+            nvidia.com/gpu: 1
+            nvidia.com/gpu-memory: "4Gi"
+            cpu: "4000m"
+            memory: "8Gi"
+          requests:
+            nvidia.com/gpu: 1
+            nvidia.com/gpu-memory: "4Gi"
+            cpu: "2000m"
+            memory: "4Gi"
+        
+        # Environment variables
+        env:
+        - name: WHISPER_MODEL
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_MODEL
+        - name: WHISPER_DEVICE
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_DEVICE
+        - name: WHISPER_COMPUTE_TYPE
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_COMPUTE_TYPE
+        - name: WHISPER_LANGUAGE
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_LANGUAGE
+        - name: WHISPER_TASK
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_TASK
+        - name: WHISPER_CHUNK_LENGTH
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_CHUNK_LENGTH
+        - name: WHISPER_STRIDE_LENGTH
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_STRIDE_LENGTH
+        - name: WHISPER_BEAM_SIZE
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_BEAM_SIZE
+        - name: WHISPER_TEMPERATURE
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_TEMPERATURE
+        - name: WHISPER_BEST_OF
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_BEST_OF
+        - name: WHISPER_PATIENCE
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_PATIENCE
+        - name: WHISPER_LENGTH_PENALTY
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_LENGTH_PENALTY
+        - name: WHISPER_SUPPRESS_TOKENS
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_SUPPRESS_TOKENS
+        - name: WHISPER_INITIAL_PROMPT
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_INITIAL_PROMPT
+        - name: WHISPER_CONDITION_ON_PREVIOUS_TEXT
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_CONDITION_ON_PREVIOUS_TEXT
+        - name: WHISPER_FP16
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_FP16
+        - name: WHISPER_TEMPERATURE_INCREMENT_ON_FALLBACK
+          valueFrom:
+            configMapKeyRef:
+              name: whisper-config
+              key: WHISPER_TEMPERATURE_INCREMENT_ON_FALLBACK
+        - name: CUDA_VISIBLE_DEVICES
+          valueFrom:
+            configMapKeyRef:
+              name: gpu-config
+              key: CUDA_VISIBLE_DEVICES
+        - name: TORCH_CUDA_ARCH_LIST
+          value: "8.9+PTX"  # Optimized for RTX 5090
+        - name: CUDA_MODULE_LOADING
+          value: "LAZY"
+        
+        # Command and args for GPU Whisper
+        command:
+        - python
+        - -m
+        - whisper_server
+        - --model
+        - $(WHISPER_MODEL)
+        - --device
+        - $(WHISPER_DEVICE)
+        - --compute_type
+        - $(WHISPER_COMPUTE_TYPE)
+        - --language
+        - $(WHISPER_LANGUAGE)
+        - --task
+        - $(WHISPER_TASK)
+        - --host
+        - 0.0.0.0
+        - --port
+        - "80"
+        - --chunk_length_s
+        - $(WHISPER_CHUNK_LENGTH)
+        - --stride_length_s
+        - $(WHISPER_STRIDE_LENGTH)
+        - --beam_size
+        - $(WHISPER_BEAM_SIZE)
+        - --temperature
+        - $(WHISPER_TEMPERATURE)
+        - --best_of
+        - $(WHISPER_BEST_OF)
+        - --patience
+        - $(WHISPER_PATIENCE)
+        - --length_penalty
+        - $(WHISPER_LENGTH_PENALTY)
+        - --suppress_tokens
+        - $(WHISPER_SUPPRESS_TOKENS)
+        - --initial_prompt
+        - $(WHISPER_INITIAL_PROMPT)
+        - --condition_on_previous_text
+        - $(WHISPER_CONDITION_ON_PREVIOUS_TEXT)
+        - --fp16
+        - $(WHISPER_FP16)
+        - --temperature_increment_on_fallback
+        - $(WHISPER_TEMPERATURE_INCREMENT_ON_FALLBACK)
+        
+        # Ports
+        ports:
+        - name: http
+          containerPort: 80
+          protocol: TCP
+        
+        # Health checks
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 60
+          periodSeconds: 30
+          timeoutSeconds: 10
+          failureThreshold: 3
+        
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: http
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        
+        startupProbe:
+          httpGet:
+            path: /health
+            port: http
+          initialDelaySeconds: 10
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 30
+        
+        # Volume mounts
+        volumeMounts:
+        - name: whisper-storage
+          mountPath: /data
+        - name: temp-storage
+          mountPath: /tmp
+        - name: whisper-config
+          mountPath: /etc/whisper-config
+          readOnly: true
+        - name: gpu-config
+          mountPath: /etc/gpu-config
+          readOnly: true
+        
+        # Security context
+        securityContext:
+          runAsUser: 1000
+          runAsGroup: 1000
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop:
+            - ALL
+          seccompProfile:
+            type: RuntimeDefault
+      
+      # Volumes
+      volumes:
+      - name: whisper-storage
+        persistentVolumeClaim:
+          claimName: whisper-storage
+      - name: temp-storage
+        persistentVolumeClaim:
+          claimName: temp-storage
+      - name: whisper-config
+        configMap:
+          name: whisper-config
+      - name: gpu-config
+        configMap:
+          name: gpu-config
+      
+      # Restart policy
+      restartPolicy: Always
+      
+      # Termination grace period
+      terminationGracePeriodSeconds: 120
+
+---
+# Service Account for Whisper
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: whisper
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: service-account
+    app.kubernetes.io/part-of: local-voice-ai
+automountServiceAccountToken: false
+
+---
+# Role for Whisper Service Account
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: whisper-role
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: local-voice-ai
+rules:
+- apiGroups: [""]
+  resources: ["pods", "services", "configmaps"]
+  verbs: ["get", "list", "watch"]
+
+---
+# Role Binding for Whisper
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: whisper-rolebinding
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: rbac
+    app.kubernetes.io/part-of: local-voice-ai
+subjects:
+- kind: ServiceAccount
+  name: whisper
+  namespace: voice-ai
+roleRef:
+  kind: Role
+  name: whisper-role
+  apiGroup: rbac.authorization.k8s.io
+
+---
+# Horizontal Pod Autoscaler
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: whisper-hpa
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: autoscaling
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: whisper
+  minReplicas: 1
+  maxReplicas: 2  # Limited by GPU availability
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
+  behavior:
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 10
+        periodSeconds: 60
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 50
+        periodSeconds: 60
+
+---
+# Pod Disruption Budget
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: whisper-pdb
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: pdb
+    app.kubernetes.io/part-of: local-voice-ai
+spec:
+  minAvailable: 0  # Allow disruption for single GPU instance
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: whisper
+
+---
+# ConfigMap for GPU optimization scripts
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: whisper-gpu-scripts
+  namespace: voice-ai
+  labels:
+    app.kubernetes.io/name: whisper
+    app.kubernetes.io/component: scripts
+    app.kubernetes.io/part-of: local-voice-ai
+data:
+  gpu-optimization.sh: |
+    #!/bin/bash
+    # GPU optimization script for Whisper
+    
+    echo "Optimizing GPU settings for Whisper..."
+    
+    # Check GPU status
+    nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits
+    
+    # Set GPU memory allocation for Whisper
+    export CUDA_VISIBLE_DEVICES=0
+    
+    # Optimize CUDA settings
+    export TORCH_CUDA_ARCH_LIST="8.9+PTX"
+    export CUDA_MODULE_LOADING=LAZY
+    
+    echo "GPU optimization completed for Whisper"
+  
+  model-downloader.sh: |
+    #!/bin/bash
+    # Download Whisper models for GPU inference
+    
+    MODELS=("tiny" "base" "small" "medium" "large-v3")
+    
+    echo "Downloading Whisper models for GPU..."
+    
+    for model in "${MODELS[@]}"; do
+      echo "Downloading model: $model"
+      python -c "
+      import whisper
+      try:
+          model = whisper.load_model('$model', device='cuda')
+          print(f'Successfully loaded: $model')
+      except Exception as e:
+          print(f'Failed to load $model: {e}')
+      "
+    done
+    
+    echo "Whisper model downloading completed"
+  
+  benchmark.sh: |
+    #!/bin/bash
+    # Benchmark GPU Whisper performance
+    
+    echo "Benchmarking Whisper GPU performance..."
+    
+    # Create test audio file (if not exists)
+    if [ ! -f "/data/test_audio.wav" ]; then
+      echo "Creating test audio file..."
+      # Generate a test audio file
+    fi
+    
+    # Benchmark different models
+    MODELS=("tiny" "base" "small" "medium" "large-v3")
+    
+    for model in "${MODELS[@]}"; do
+      echo "Benchmarking model: $model"
+      start_time=$(date +%s.%N)
+      
+      python -c "
+      import whisper
+      import time
+      model = whisper.load_model('$model', device='cuda')
+      result = model.transcribe('/data/test_audio.wav')
+      print(f'Transcription: {result[\"text\"][:100]}...')
+      "
+      
+      end_time=$(date +%s.%N)
+      duration=$(echo "$end_time - $start_time" | bc)
+      echo "Model $model took ${duration} seconds"
+    done
+    
+    echo "Benchmark completed"
+  
+  health-check.sh: |
+    #!/bin/bash
+    # Health check script for Whisper GPU
+    
+    # Check if Whisper API is responding
+    if curl -f http://localhost:80/health > /dev/null 2>&1; then
+      echo "Whisper API is responding"
+    else
+      echo "Whisper API is not responding"
+      exit 1
+    fi
+    
+    # Check GPU status
+    if nvidia-smi > /dev/null 2>&1; then
+      echo "GPU is available"
+      nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total,temperature.gpu --format=csv,noheader,nounits
+    else
+      echo "GPU is not available"
+      exit 1
+    fi
+    
+    # Test transcription
+    echo "Testing transcription..."
+    curl -X POST http://localhost:80/transcribe \
+      -H "Content-Type: application/json" \
+      -d '{"audio_url": "test.wav"}' || echo "Transcription test failed"
+    
+    echo "Whisper GPU health check completed successfully"
