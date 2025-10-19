@@ -75,6 +75,21 @@ docker-compose up --build
 
 The services will restart and build fresh containers.
 
+### Comprehensive Testing
+
+For complete testing of your Local Voice AI setup, including documentation validation, Git workflow verification, and end-to-end voice assistant testing:
+
+- 📋 [Testing Guide](./TESTING_GUIDE.md) - Comprehensive testing instructions
+- 🔧 [Verification Script](./verify-setup.sh) - Automated setup verification
+
+```bash
+# Run the verification script to check your setup
+./verify-setup.sh
+
+# Test documentation validation
+python3 scripts/validate-docs.py
+```
+
 ## 🧰 Project Structure
 
 ```

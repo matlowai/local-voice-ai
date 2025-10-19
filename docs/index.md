@@ -19,6 +19,13 @@ This documentation system provides comprehensive guidance for understanding, dev
 | [Coding Standards](coding-standards.md) | Docstring standards, documentation practices, and code style | **Required Reading** |
 | [Lessons Learned](lessons-learned.md) | Important lessons, best practices, and troubleshooting | **Recommended** |
 
+### 🧪 Testing & Validation
+
+| Resource | Description | Usage |
+|----------|-------------|-------|
+| [Testing Guide](../TESTING_GUIDE.md) | Comprehensive testing instructions for the complete setup | **Essential** |
+| [Verification Script](../verify-setup.sh) | Automated script to verify all components are working | **Run First** |
+
 ### 🔧 Service Documentation
 
 | Service | Documentation | Description |
@@ -32,9 +39,11 @@ This documentation system provides comprehensive guidance for understanding, dev
 
 ## 🚀 Quick Start
 
-1. **For Human Developers**: Start with [Architecture](architecture.md) to understand the system
-2. **For Coding Agents**: Start with [Coding Standards](coding-standards.md) for documentation requirements
-3. **For Troubleshooting**: Check [Lessons Learned](lessons-learned.md) for common issues
+1. **For Testing Your Setup**: Run `./verify-setup.sh` to verify all components
+2. **For Human Developers**: Start with [Architecture](architecture.md) to understand the system
+3. **For Coding Agents**: Start with [Coding Standards](coding-standards.md) for documentation requirements
+4. **For Troubleshooting**: Check [Lessons Learned](lessons-learned.md) for common issues
+5. **For Complete Testing**: Follow the [Testing Guide](../TESTING_GUIDE.md) for comprehensive testing
 
 ## 🎯 Project Overview
 
@@ -77,7 +86,8 @@ This documentation is designed to be maintained alongside the codebase. All codi
 1. Read the [Coding Standards](coding-standards.md) before making changes
 2. Update relevant documentation after implementing features
 3. Follow the docstring standards for all new code
-4. Validate documentation links and references
+4. Validate documentation links and references: `python3 scripts/validate-docs.py`
+5. Verify complete setup after changes: `./verify-setup.sh`
 
 ## 🤖 For Coding Agents
 
